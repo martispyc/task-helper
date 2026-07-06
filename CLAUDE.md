@@ -70,7 +70,7 @@ Team facts live in `bundle/.github/task-helper/framework-rules.md` (projects kid
 
 ## Dashboard design system
 
-Nordic-minimal: paper `#FAFAF8`, ink `#151916`, pine `#1E6B4E`, amber `#A9761C` for gaps, red `#A4402F` for blockers, hairlines `#E6E8E3`; `ui-monospace/Cascadia Mono` for meta; 680px single column; dotted-remainder level gauges; 112px weight-200 tabular score; staggered `.rv` reveals, rAF count-up, `prefers-reduced-motion` respected. Demo mode: three embedded sample states (gathering / implementing / approved) behind "view with sample data"; opening a real file exits demo.
+Vercel/v0 dark: bg `#0A0A0A` with a faint blue radial top glow, cards `#111113` with 1px `#26262A` borders and 12px radius, text `#EDEDED` / muted `#A1A1AA` / faint `#63636B`; success green `#0CCE6B`, amber `#F5A623` for gaps, red `#F14C4C` for blockers, focus blue `#52A9FF`; `ui-monospace/Cascadia Mono` for meta (system stacks only — zero network). 860px single column: branded top bar (CSS-triangle logo, white primary button + ghost button), pipeline dot strip, hero card (green-tinted border via `:has` when ready) holding title + 72px weight-650 tabular score + 6px rounded gradient progress bar + pill stamp, then one card per section with pill count badges; questions/severities/verdicts as tinted pill badges. Staggered `.rv` reveals, rAF count-up, `prefers-reduced-motion` respected. Demo mode: three embedded sample states (gathering / implementing / approved) behind "view with sample data"; opening a real file exits demo.
 
 ## Scripts
 
