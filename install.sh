@@ -11,18 +11,25 @@
 # imported repo folder itself so your project root stays clean.
 #
 # Flags:
-#   --reset-task    archive .github/task/context.md to .github/task/archive/ and start clean
-#   --keep-source   don't delete the imported repo folder after installing
+#   --reset-task      archive .github/task/context.md to .github/task/archive/ and start clean
+#   --keep-source     don't delete the imported repo folder after installing
+#   --shared <path>   make .github/task a link into <path> — a OneDrive-synced
+#                     SharePoint library folder — so the whole team's dashboards
+#                     follow the same context.md (data stays inside your tenant)
 set -e
 
 main() {
-  local RESET_TASK=0 KEEP_SOURCE=0 arg
-  for arg in "$@"; do
-    case "$arg" in
+  local RESET_TASK=0 KEEP_SOURCE=0 SHARED=""
+  while [ $# -gt 0 ]; do
+    case "$1" in
       --reset-task)  RESET_TASK=1 ;;
       --keep-source) KEEP_SOURCE=1 ;;
-      *) echo "unknown flag: $arg (known: --reset-task, --keep-source)"; exit 1 ;;
+      --shared)      shift; SHARED="${1:-}"
+                     [ -n "$SHARED" ] || { echo "error: --shared needs a path (the OneDrive-synced library folder)"; exit 1; } ;;
+      --shared=*)    SHARED="${1#--shared=}" ;;
+      *) echo "unknown flag: $1 (known: --reset-task, --keep-source, --shared <path>)"; exit 1 ;;
     esac
+    shift
   done
 
   local HERE SRC TARGET
@@ -46,10 +53,45 @@ main() {
   rm -f task-dashboard.html
 
   # ── put every file in place
-  mkdir -p .github/agents .github/task-helper .github/task
+  mkdir -p .github/agents .github/task-helper
   cp "$SRC"/.github/agents/*.agent.md .github/agents/
   cp "$SRC"/.github/task-helper/*.md  .github/task-helper/
   cp "$SRC"/task-dashboard.html .
+
+  # ── task dir: local by default, or a link into a synced shared folder
+  if [ -n "$SHARED" ]; then
+    SHARED="$(cd "$SHARED" 2>/dev/null && pwd -P)" \
+      || { echo "error: shared folder not found — sync the SharePoint library in OneDrive first, then pass its local path"; exit 1; }
+    if [ -L .github/task ]; then
+      if [ "$(cd .github/task && pwd -P)" = "$SHARED" ]; then
+        echo "shared task folder already linked: $SHARED"
+      else
+        rm .github/task && ln -s "$SHARED" .github/task
+        echo "task folder re-linked to: $SHARED"
+      fi
+    else
+      if [ -d .github/task ]; then
+        # migrate local task data into the shared folder without clobbering
+        local f base
+        for f in .github/task/* .github/task/.[!.]*; do
+          [ -e "$f" ] || continue
+          base="$(basename "$f")"
+          if [ -e "$SHARED/$base" ]; then
+            mkdir -p "$SHARED/archive"
+            mv "$f" "$SHARED/archive/$(date +%F-%H%M)-local-$base"
+            echo "shared folder already had $base — local copy archived to archive/"
+          else
+            mv "$f" "$SHARED/"
+          fi
+        done
+        rmdir .github/task
+      fi
+      ln -s "$SHARED" .github/task
+      echo "task folder shared: .github/task -> $SHARED"
+    fi
+  else
+    mkdir -p .github/task
+  fi
 
   if [ "$RESET_TASK" = 1 ] && [ -f .github/task/context.md ]; then
     mkdir -p .github/task/archive
@@ -58,6 +100,8 @@ main() {
   fi
 
   grep -qx '.github/task/' .gitignore 2>/dev/null || printf '\n.github/task/\n' >> .gitignore
+  # a linked task dir is a symlink — the trailing-slash pattern doesn't cover it
+  grep -qx '.github/task' .gitignore 2>/dev/null || printf '.github/task\n' >> .gitignore
 
   # ── the imported repo folder has done its job — remove it
   if [ "$KEEP_SOURCE" = 1 ]; then
@@ -98,6 +142,17 @@ Task Pipeline installed ✅
  start a fresh task.
 ──────────────────────────────────────────────────────────────────
 TUTORIAL
+
+  if [ -n "$SHARED" ]; then
+    cat <<'SHAREDNOTE'
+ Shared mode: .github/task points into your synced SharePoint library.
+ Convention — agents run on ONE machine per task (the task owner's);
+ everyone else opens task-dashboard.html against their own synced copy,
+ which live-follows as OneDrive syncs it. Two machines running agents
+ on the same task will produce OneDrive conflict copies.
+──────────────────────────────────────────────────────────────────
+SHAREDNOTE
+  fi
 }
 
 main "$@"; exit

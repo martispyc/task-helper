@@ -10,9 +10,12 @@
 # imported repo folder itself so your project root stays clean.
 #
 # Flags:
-#   -ResetTask     archive .github\task\context.md to .github\task\archive\ and start clean
-#   -KeepSource    don't delete the imported repo folder after installing
-param([switch]$ResetTask, [switch]$KeepSource)
+#   -ResetTask       archive .github\task\context.md to .github\task\archive\ and start clean
+#   -KeepSource      don't delete the imported repo folder after installing
+#   -Shared <path>   make .github\task a junction into <path> — a OneDrive-synced
+#                    SharePoint library folder — so the whole team's dashboards
+#                    follow the same context.md (data stays inside your tenant)
+param([switch]$ResetTask, [switch]$KeepSource, [string]$Shared)
 $ErrorActionPreference = 'Stop'
 
 $here = $PSScriptRoot
@@ -36,10 +39,47 @@ Remove-Item .github\task-helper -Recurse -Force -ErrorAction SilentlyContinue
 Remove-Item task-dashboard.html -Force -ErrorAction SilentlyContinue
 
 # ── put every file in place
-New-Item -ItemType Directory -Force .github\agents, .github\task-helper, .github\task | Out-Null
+New-Item -ItemType Directory -Force .github\agents, .github\task-helper | Out-Null
 Copy-Item (Join-Path $src '.github\agents\*.agent.md') .github\agents\ -Force
 Copy-Item (Join-Path $src '.github\task-helper\*.md')  .github\task-helper\ -Force
 Copy-Item (Join-Path $src 'task-dashboard.html') . -Force
+
+# ── task dir: local by default, or a junction into a synced shared folder
+$taskDir = '.github\task'
+if ($Shared) {
+  if (-not (Test-Path $Shared -PathType Container)) {
+    throw "shared folder not found: $Shared — sync the SharePoint library in OneDrive first, then pass its local path"
+  }
+  $sharedFull = (Resolve-Path $Shared).Path
+  $item = Get-Item $taskDir -Force -ErrorAction SilentlyContinue
+  if ($item -and ($item.Attributes -band [IO.FileAttributes]::ReparsePoint)) {
+    # already a junction — recreate it pointing at the requested target
+    # (cmd rmdir removes only the junction, never the target's contents)
+    cmd /c rmdir $taskDir
+    New-Item -ItemType Junction -Path $taskDir -Target $sharedFull | Out-Null
+    Write-Host "task folder linked to: $sharedFull"
+  } else {
+    if ($item) {
+      # migrate local task data into the shared folder without clobbering
+      Get-ChildItem $taskDir -Force | ForEach-Object {
+        $dest = Join-Path $sharedFull $_.Name
+        if (Test-Path $dest) {
+          $arch = Join-Path $sharedFull 'archive'
+          New-Item -ItemType Directory -Force $arch | Out-Null
+          Move-Item $_.FullName (Join-Path $arch ("{0}-local-{1}" -f (Get-Date -Format 'yyyy-MM-dd-HHmm'), $_.Name)) -Force
+          Write-Host ("shared folder already had {0} — local copy archived to archive\" -f $_.Name)
+        } else {
+          Move-Item $_.FullName $dest
+        }
+      }
+      Remove-Item $taskDir -Force
+    }
+    New-Item -ItemType Junction -Path $taskDir -Target $sharedFull | Out-Null
+    Write-Host "task folder shared: .github\task -> $sharedFull"
+  }
+} else {
+  New-Item -ItemType Directory -Force $taskDir | Out-Null
+}
 
 if ($ResetTask -and (Test-Path .github\task\context.md)) {
   New-Item -ItemType Directory -Force .github\task\archive | Out-Null
@@ -49,6 +89,10 @@ if ($ResetTask -and (Test-Path .github\task\context.md)) {
 
 if (-not (Test-Path .gitignore) -or -not (Select-String -Path .gitignore -Pattern '^\.github/task/$' -Quiet)) {
   Add-Content .gitignore "`n.github/task/"
+}
+# a linked task dir can be a symlink on some setups — cover it without the slash too
+if (-not (Select-String -Path .gitignore -Pattern '^\.github/task$' -Quiet)) {
+  Add-Content .gitignore ".github/task"
 }
 
 # ── the imported repo folder has done its job — remove it
@@ -86,3 +130,14 @@ Task Pipeline installed ✅
  start a fresh task.
 ──────────────────────────────────────────────────────────────────
 '@
+
+if ($Shared) {
+  Write-Host @'
+ Shared mode: .github\task points into your synced SharePoint library.
+ Convention — agents run on ONE machine per task (the task owner's);
+ everyone else opens task-dashboard.html against their own synced copy,
+ which live-follows as OneDrive syncs it. Two machines running agents
+ on the same task will produce OneDrive conflict copies.
+──────────────────────────────────────────────────────────────────
+'@
+}

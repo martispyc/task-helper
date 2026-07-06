@@ -6,20 +6,45 @@
 <title>Task Pipeline — dashboard</title>
 <style>
   :root{
-    --bg:#0A0A0A; --card:#111113; --inset:#0D0D0F;
-    --border:#26262A; --border-hi:#3B3B42;
-    --text:#EDEDED; --muted:#A1A1AA; --faint:#63636B;
-    --green:#0CCE6B; --green-dim:rgba(12,206,107,.12); --green-line:rgba(12,206,107,.4);
-    --amber:#F5A623; --amber-dim:rgba(245,166,35,.12);
-    --red:#F14C4C; --red-dim:rgba(241,76,76,.12); --red-line:rgba(241,76,76,.35);
-    --blue:#52A9FF;
+    --bg:#FFFFFF; --card:#FFFFFF; --inset:#FAFAFA;
+    --border:#EAEAEA; --border-hi:#D9D9DE;
+    --text:#171717; --muted:#666666; --faint:#8F8F8F;
+    --green:#0A8A4A; --green-dim:rgba(10,138,74,.09); --green-line:rgba(10,138,74,.4);
+    --amber:#A15C07; --amber-dim:rgba(161,92,7,.1);
+    --red:#CB2A2F; --red-dim:rgba(203,42,47,.08); --red-line:rgba(203,42,47,.35);
+    --blue:#0070F3;
+    --glow:rgba(0,112,243,.06);
+    --hero-grad:linear-gradient(180deg,#FFFFFF,#FAFAFA);
+    --track:#EDEDEF;
+    --fill-grad:linear-gradient(90deg,#52525B,#171717);
+    --ready-grad:linear-gradient(90deg,#0A8A4A,#12A159);
+    --btn-bg:#171717; --btn-fg:#FFFFFF; --btn-hover:#383838;
+    --shadow:0 1px 2px rgba(0,0,0,.05);
     --mono:ui-monospace,"Cascadia Mono",Consolas,"SF Mono",monospace;
     --ease:cubic-bezier(.22,1,.36,1); --r:12px;
   }
+  @media (prefers-color-scheme:dark){
+    :root{
+      --bg:#0A0A0A; --card:#111113; --inset:#0D0D0F;
+      --border:#26262A; --border-hi:#3B3B42;
+      --text:#EDEDED; --muted:#A1A1AA; --faint:#63636B;
+      --green:#0CCE6B; --green-dim:rgba(12,206,107,.12); --green-line:rgba(12,206,107,.4);
+      --amber:#F5A623; --amber-dim:rgba(245,166,35,.12);
+      --red:#F14C4C; --red-dim:rgba(241,76,76,.12); --red-line:rgba(241,76,76,.35);
+      --blue:#52A9FF;
+      --glow:rgba(82,169,255,.07);
+      --hero-grad:linear-gradient(180deg,#141417,#0F0F11);
+      --track:#1D1D21;
+      --fill-grad:linear-gradient(90deg,#7C7C85,#EDEDED);
+      --ready-grad:linear-gradient(90deg,#0A8F4C,#0CCE6B);
+      --btn-bg:#EDEDED; --btn-fg:#0A0A0A; --btn-hover:#C9C9CE;
+      --shadow:none;
+    }
+  }
   *{box-sizing:border-box;margin:0;padding:0}
-  html{background:var(--bg);color-scheme:dark}
+  html{background:var(--bg);color-scheme:light dark}
   body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--text);
-    background:radial-gradient(1100px 480px at 50% -12%,rgba(82,169,255,.07),transparent 60%),var(--bg);
+    background:radial-gradient(1100px 480px at 50% -12%,var(--glow),transparent 60%),var(--bg);
     -webkit-font-smoothing:antialiased;line-height:1.5;min-height:100vh}
   .page{max-width:860px;margin:0 auto;padding:32px 24px 80px}
 
@@ -36,8 +61,8 @@
   .controls{display:flex;gap:10px;align-items:center}
   .btn{font:inherit;font-size:13px;font-weight:500;height:32px;padding:0 14px;border-radius:8px;
     cursor:pointer;transition:background .15s,border-color .15s,color .15s}
-  .btn.primary{background:var(--text);color:#0A0A0A;border:1px solid var(--text)}
-  .btn.primary:hover{background:#C9C9CE;border-color:#C9C9CE}
+  .btn.primary{background:var(--btn-bg);color:var(--btn-fg);border:1px solid var(--btn-bg)}
+  .btn.primary:hover{background:var(--btn-hover);border-color:var(--btn-hover)}
   .btn.ghost{background:transparent;color:var(--muted);border:1px solid var(--border)}
   .btn.ghost:hover{color:var(--text);border-color:var(--border-hi)}
   button.link{background:none;border:none;font:inherit;font-size:12.5px;color:var(--muted);cursor:pointer;
@@ -87,7 +112,7 @@
   #board{display:none}
 
   /* hero card */
-  .hero{background:linear-gradient(180deg,#141417,#0F0F11);border:1px solid var(--border);
+  .hero{background:var(--hero-grad);border:1px solid var(--border);box-shadow:var(--shadow);
     border-radius:var(--r);padding:26px 28px 28px;transition:border-color .6s}
   .hero:has(.gauge.ready){border-color:var(--green-line)}
   .eyebrow{font-family:var(--mono);font-size:11px;letter-spacing:.1em;text-transform:uppercase;color:var(--faint)}
@@ -100,11 +125,11 @@
   .score{font-size:72px;font-weight:650;letter-spacing:-.045em;line-height:1;
     font-variant-numeric:tabular-nums;transition:color .6s var(--ease)}
   .score small{font-size:16px;font-weight:400;color:var(--faint);letter-spacing:0}
-  .track{position:relative;height:6px;border-radius:999px;background:#1D1D21;margin-top:20px;overflow:hidden}
+  .track{position:relative;height:6px;border-radius:999px;background:var(--track);margin-top:20px;overflow:hidden}
   .fill{position:absolute;left:0;top:0;bottom:0;border-radius:999px;width:0;
-    background:linear-gradient(90deg,#7C7C85,#EDEDED);
+    background:var(--fill-grad);
     transition:width .9s var(--ease),background .6s var(--ease)}
-  .ready .fill{background:linear-gradient(90deg,#0A8F4C,var(--green))}
+  .ready .fill{background:var(--ready-grad)}
   .ready .score{color:var(--green)}
   .statusline{display:flex;gap:12px;align-items:center;margin-top:16px;font-size:13.5px;
     color:var(--muted);min-height:28px;flex-wrap:wrap}
@@ -116,7 +141,7 @@
 
   /* section cards */
   section{margin-top:14px;background:var(--card);border:1px solid var(--border);
-    border-radius:var(--r);padding:18px 22px 10px}
+    box-shadow:var(--shadow);border-radius:var(--r);padding:18px 22px 10px}
   section>h2{font-size:13.5px;font-weight:600;letter-spacing:-.01em;color:var(--text);
     padding-bottom:12px;border-bottom:1px solid var(--border);
     display:flex;justify-content:space-between;align-items:center}
@@ -129,10 +154,10 @@
     padding:13px 0;border-bottom:1px solid var(--border)}
   .dim .name{font-size:13.5px;color:var(--muted)}
   .dim.full .name{color:var(--text)}
-  .dim .bar{position:relative;height:6px;border-radius:999px;background:#1D1D21;overflow:hidden}
+  .dim .bar{position:relative;height:6px;border-radius:999px;background:var(--track);overflow:hidden}
   .dim .bar i{position:absolute;left:0;top:0;bottom:0;border-radius:999px;width:0;
-    background:linear-gradient(90deg,#7C7C85,#EDEDED);transition:width .8s var(--ease)}
-  .dim.full .bar i{background:linear-gradient(90deg,#0A8F4C,var(--green))}
+    background:var(--fill-grad);transition:width .8s var(--ease)}
+  .dim.full .bar i{background:var(--ready-grad)}
   .dim.full .num{color:var(--green)}
   .dim .num{font-family:var(--mono);font-size:12.5px;text-align:right;font-variant-numeric:tabular-nums}
   .dim .missing{grid-column:1/-1;font-size:12.5px;color:var(--amber);margin-top:-6px;padding-bottom:8px}

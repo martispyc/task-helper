@@ -19,9 +19,26 @@ bash task-helper/install.sh      # Windows: powershell -ExecutionPolicy Bypass -
 
 One run does everything: it removes this pipeline's old files (the four agent files, `.github/task-helper/`, the old root `task-dashboard.html`), puts every fresh file where it belongs, gitignores `.github/task/`, prints a quick usage tutorial, and finally **deletes the imported repo folder itself** — your project root stays clean. Running it from inside the imported folder works too (it installs into the parent). To update later, just import the repo again and re-run install.
 
-**Task data is preserved** across updates; add `--reset-task` / `-ResetTask` to archive `context.md` to `.github/task/archive/` and start clean. Add `--keep-source` / `-KeepSource` to keep the imported folder around.
+**Task data is preserved** across updates; add `--reset-task` / `-ResetTask` to archive `context.md` to `.github/task/archive/` and start clean. Add `--keep-source` / `-KeepSource` to keep the imported folder around. Add `--shared <path>` / `-Shared <path>` to share the task folder with your team (next section).
 
 Then reload VS Code → pick **Context Getter**. Agents are pinned to Claude Opus 4.8 (falls back to Sonnet 4.6; Copilot admins must enable the Opus 4.8 model policy).
+
+## Share a task with your team (SharePoint/OneDrive)
+
+Context lives in one file, so sharing it = sharing one folder. Use a SharePoint document library from your M365 tenant — no new server, no firewall exception, data never leaves the tenant:
+
+1. Create (or pick) a document library / folder in your team's SharePoint site, e.g. `Task Pipeline/kids-onboarding-mfe`.
+2. Everyone clicks **Sync** on it (OneDrive makes it a normal local folder).
+3. Each person installs with the flag, pointing at their synced copy:
+
+```
+bash task-helper/install.sh --shared "$HOME/SEB/Task Pipeline - kids-onboarding-mfe"
+# Windows: ...install.ps1 -Shared "C:\Users\you\SEB\Task Pipeline - kids-onboarding-mfe"
+```
+
+`.github/task/` becomes a link into the synced folder (junction on Windows — no admin rights needed). Existing local task data is migrated in, never clobbered. Agents and the dashboard don't change at all — the dashboard live-follows your synced copy, so you watch a teammate's agent work in near-real-time as OneDrive syncs.
+
+**Single-writer convention:** agents run on ONE machine per task (the task owner's). Everyone else opens the dashboard read-only. Two machines running agents on the same task will produce OneDrive conflict copies.
 
 ## Install via email (.txt route — when git can't reach)
 
