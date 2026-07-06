@@ -24,7 +24,7 @@
     --ease:cubic-bezier(.22,1,.36,1); --r:12px;
   }
   @media (prefers-color-scheme:dark){
-    :root{
+    :root:not([data-theme="light"]){
       --bg:#0A0A0A; --card:#111113; --inset:#0D0D0F;
       --border:#26262A; --border-hi:#3B3B42;
       --text:#EDEDED; --muted:#A1A1AA; --faint:#63636B;
@@ -40,6 +40,22 @@
       --btn-bg:#EDEDED; --btn-fg:#0A0A0A; --btn-hover:#C9C9CE;
       --shadow:none;
     }
+  }
+  :root[data-theme="dark"]{
+    --bg:#0A0A0A; --card:#111113; --inset:#0D0D0F;
+    --border:#26262A; --border-hi:#3B3B42;
+    --text:#EDEDED; --muted:#A1A1AA; --faint:#63636B;
+    --green:#0CCE6B; --green-dim:rgba(12,206,107,.12); --green-line:rgba(12,206,107,.4);
+    --amber:#F5A623; --amber-dim:rgba(245,166,35,.12);
+    --red:#F14C4C; --red-dim:rgba(241,76,76,.12); --red-line:rgba(241,76,76,.35);
+    --blue:#52A9FF;
+    --glow:rgba(82,169,255,.07);
+    --hero-grad:linear-gradient(180deg,#141417,#0F0F11);
+    --track:#1D1D21;
+    --fill-grad:linear-gradient(90deg,#7C7C85,#EDEDED);
+    --ready-grad:linear-gradient(90deg,#0A8F4C,#0CCE6B);
+    --btn-bg:#EDEDED; --btn-fg:#0A0A0A; --btn-hover:#C9C9CE;
+    --shadow:none;
   }
   *{box-sizing:border-box;margin:0;padding:0}
   html{background:var(--bg);color-scheme:light dark}
@@ -209,6 +225,24 @@
 
   .dim:last-child,.step:last-child,.q:last-child,.info:last-child,.ritem:last-child{border-bottom:0}
   .empty-note{padding:14px 0;color:var(--faint);font-size:13.5px}
+
+  /* copy-for-Teams */
+  .copyq{margin-top:8px;font-family:var(--mono);font-size:11.5px}
+  .copyq.did{color:var(--green);text-decoration:none}
+
+  /* live-change flash on sections */
+  @keyframes secflash{0%{border-color:var(--green);box-shadow:0 0 0 3px var(--green-dim)}
+    70%{border-color:var(--green)}100%{border-color:var(--border);box-shadow:var(--shadow)}}
+  section.chg{animation:secflash 1.5s var(--ease)}
+
+  /* empty-state pipeline explainer */
+  .how{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;max-width:600px;margin:40px auto 0;text-align:left}
+  .how span{font-family:var(--mono);font-size:11px;color:var(--faint);line-height:1.6;
+    border:1px solid var(--border);border-radius:8px;padding:10px 12px;background:var(--card)}
+  .how b{display:block;color:var(--green);font-weight:600;margin-bottom:2px}
+
+  #confetti{position:fixed;inset:0;pointer-events:none;z-index:99}
+  #btnTheme{font-family:var(--mono);font-size:12px}
   footer{margin-top:36px;padding-top:16px;border-top:1px solid var(--border);
     display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
     font-family:var(--mono);font-size:11px;color:var(--faint)}
@@ -221,6 +255,7 @@
     section{padding:14px 16px 8px}
     .pipe .conn{min-width:8px}
     .stage .lbl{letter-spacing:.04em}
+    .how{grid-template-columns:repeat(2,1fr)}
   }
   @media (prefers-reduced-motion:reduce){
     *,*::before,*::after{animation:none!important;transition:none!important}
@@ -235,6 +270,7 @@
     <span class="brand"><span class="logo" aria-hidden="true"></span>Task Pipeline</span>
     <span class="controls">
       <span class="livedot" id="livedot"><i></i>live</span>
+      <button class="link" id="btnTheme" type="button" title="cycle theme: auto / light / dark">theme: auto</button>
       <button class="btn ghost" id="btnRefresh" style="display:none">Refresh</button>
       <button class="btn primary" id="btnOpen">Open context.md</button>
     </span>
@@ -254,6 +290,12 @@
     <p>The file Context Getter maintains. Parsed right here in your browser — nothing is uploaded, no network calls are made.</p>
     <div class="hint">or click to choose the file · Edge/Chrome keep it live-updating</div>
     <div class="hint" style="margin-top:14px"><button class="link" id="btnDemo" type="button">view with sample data</button></div>
+    <div class="how" aria-label="How the pipeline works">
+      <span><b>1 · Context Getter</b>collects everything, scores it 0–100</span>
+      <span><b>2 · Planner</b>at 100/100, writes the step plan</span>
+      <span><b>3 · Implementer</b>executes the steps one by one</span>
+      <span><b>4 · Review</b>runs the checks, stamps a verdict</span>
+    </div>
   </div>
 
   <div id="board">
@@ -283,6 +325,7 @@
 
     <footer class="rv">
       <span>parsed locally · no data leaves this machine</span>
+      <span>keys: <b>o</b> open · <b>r</b> refresh · <b>1/2/3</b> samples</span>
       <span id="fname"></span>
     </footer>
   </div>
@@ -294,8 +337,18 @@
 (function(){
   "use strict";
   var fileHandle=null,pollTimer=null,lastMod=0,lastText="",prevScore=0,firstRender=true;
+  var prevApproved=false,baseUpdated="",lastLoadTs=0,lastOpen=[];
   var reduced=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var $=function(id){return document.getElementById(id)};
+
+  /* ---------- theme (auto / light / dark, remembered locally) ---------- */
+  function loadPref(k){try{return localStorage.getItem(k)}catch(e){return null}}
+  function storePref(k,v){try{v?localStorage.setItem(k,v):localStorage.removeItem(k)}catch(e){}}
+  function applyTheme(t){
+    if(t)document.documentElement.setAttribute("data-theme",t);
+    else document.documentElement.removeAttribute("data-theme");
+    $("btnTheme").textContent="theme: "+(t||"auto");
+  }
 
   /* ---------- parsing ---------- */
   function sections(md){
@@ -334,6 +387,7 @@
         by:(head.match(/answered by\s*([^,]+)/i)||[,""])[1].trim(),
         q:(p.match(/\*\*Question:\*\*\s*([\s\S]*?)(?=\n\*\*|\n###|$)/)||[,""])[1].trim(),
         why:(p.match(/\*\*Why it matters:\*\*\s*([\s\S]*?)(?=\n\*\*|\n###|$)/)||[,""])[1].trim(),
+        guess:(p.match(/\*\*Best guess:\*\*\s*([\s\S]*?)(?=\n\*\*|\n###|$)/)||[,""])[1].trim(),
         a:(p.match(/\*\*Answer:\*\*\s*([\s\S]*?)(?=\n\*\*|\n###|$)/)||[,""])[1].trim()
       });
     });
@@ -387,6 +441,49 @@
       setTimeout(function(){n.classList.add("in")},i*55);i++;
     });
   }
+  function copyText(t,done){
+    function fallback(){
+      var ta=document.createElement("textarea");ta.value=t;ta.style.position="fixed";ta.style.opacity="0";
+      document.body.appendChild(ta);ta.select();
+      try{document.execCommand("copy")}catch(e){}
+      document.body.removeChild(ta);done();
+    }
+    if(navigator.clipboard&&navigator.clipboard.writeText)
+      navigator.clipboard.writeText(t).then(done,fallback);
+    else fallback();
+  }
+  function setFavicon(color){
+    var c=document.createElement("canvas");c.width=64;c.height=64;
+    var x=c.getContext("2d");
+    x.beginPath();x.arc(32,32,22,0,Math.PI*2);x.fillStyle=color;x.fill();
+    var l=document.querySelector('link[rel="icon"]');
+    if(!l){l=document.createElement("link");l.rel="icon";document.head.appendChild(l);}
+    l.href=c.toDataURL("image/png");
+  }
+  function confetti(){
+    if(document.getElementById("confetti"))return;
+    var c=document.createElement("canvas");c.id="confetti";
+    c.width=innerWidth;c.height=innerHeight;document.body.appendChild(c);
+    var x=c.getContext("2d"),cols=["#12A159","#0CCE6B","#F5A623","#0070F3","#8F8F8F"],P=[],i;
+    for(i=0;i<90;i++)P.push({x:Math.random()*c.width,y:-20-Math.random()*c.height*.4,
+      r:3+Math.random()*4,v:2.2+Math.random()*3,w:Math.random()*2-1,c:cols[i%cols.length],a:Math.random()*Math.PI});
+    var t0=Date.now();
+    (function f(){
+      x.clearRect(0,0,c.width,c.height);
+      P.forEach(function(p){p.y+=p.v;p.x+=p.w;p.a+=.1;
+        x.save();x.translate(p.x,p.y);x.rotate(p.a);x.fillStyle=p.c;x.fillRect(-p.r,-p.r/2,p.r*2,p.r);x.restore();});
+      if(Date.now()-t0<1800)requestAnimationFrame(f);
+      else if(c.parentNode)c.parentNode.removeChild(c);
+    })();
+  }
+  function teamsMsg(q,key){
+    return "Hi! Quick question about "+(key||"our task")
+      +(q.ask?" (asking you as: "+q.ask+")":"")+":\n\n"
+      +(q.q||"")+"\n\n"
+      +(q.why?"Why it matters: "+q.why+"\n":"")
+      +(q.guess?"Our current guess: "+q.guess+"\n":"")
+      +"\nIt's "+(q.blocking?"blocking":"nice-to-know")+" for planning ("+(q.id||"Q")+"). Thanks!";
+  }
 
   /* ---------- rendering ---------- */
   function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML;}
@@ -399,6 +496,8 @@
     return h;
   }
   function render(md,fileName,isUpdate){
+    var secIds=["dims","steps","openQs","qas","infos","review"],prevHTML={};
+    if(isUpdate)secIds.forEach(function(id){prevHTML[id]=$(id).innerHTML});
     var p=sections(md);
     var conf=parseConfidence(p.sec["confidence"]);
     var open=parseQuestions(p.sec["open questions"]).filter(function(q){return !q.done});
@@ -418,7 +517,9 @@
     $("ticketKey").textContent=km?km[1]:"";
     $("taskTitle").textContent=km?km[2]:t.replace(/^<|>$/g,"");
     var up=$("updated");
-    up.textContent=(conf.updated?"scored "+conf.updated+" · ":"")+"loaded "+new Date().toLocaleTimeString();
+    baseUpdated=(conf.updated?"scored "+conf.updated+" · ":"");
+    lastLoadTs=Date.now();
+    up.textContent=baseUpdated+"loaded just now";
     if(isUpdate&&!reduced){up.classList.add("flash");setTimeout(function(){up.classList.remove("flash")},900);}
     $("fname").textContent=fileName||"";
 
@@ -441,10 +542,22 @@
     countUp($("scoreNum"),firstRender?0:prevScore,s,800);
     prevScore=s;
     requestAnimationFrame(function(){$("fill").style.width=s+"%";});
+    /* next-action guidance — always one concrete next move */
     var blockers=open.filter(function(q){return q.blocking}).length;
-    $("statusText").textContent=ctxDone?(planDone?"":"hand off to Planner")
-      :(conf.override?conf.override
-      :"not ready · "+(blockers?blockers+" blocking question"+(blockers>1?"s":"")+" open":"gaps listed below"));
+    var flagged=steps.filter(function(x){return x.flag&&!x.done}).length;
+    var nextMsg;
+    if(rev&&rev.approved)nextMsg="approved — ship it";
+    else if(rev){
+      var mf=rev.items.filter(function(r){return /must/i.test(r.sev)}).length;
+      nextMsg="rejected · "+(mf?mf+" must-fix item"+(mf>1?"s":""):"fixes needed")+" → back to Implementer";
+    }
+    else if(flagged)nextMsg=flagged+" step"+(flagged>1?"s":"")+" flagged ⏳ → back to Planner";
+    else if(implDone)nextMsg="all steps done → run Review";
+    else if(planDone)nextMsg="step "+Math.min(doneSteps+1,steps.length)+" of "+steps.length+" → Implementer";
+    else if(ctxDone)nextMsg="hand off to Planner";
+    else if(conf.override)nextMsg=conf.override;
+    else nextMsg="not ready · "+(blockers?blockers+" blocking question"+(blockers>1?"s":"")+" open — copy & send below":"gaps listed below");
+    $("statusText").textContent=nextMsg;
 
     /* dimensions */
     var dh="";
@@ -471,13 +584,15 @@
     :'<div class="empty-note">'+(ctxDone?"Context is ready — the Planner writes steps under ## Planning.":"Unlocks when context reaches 100.")+'</div>';
 
     /* questions */
+    lastOpen=open;
     $("openCount").textContent=open.length||"";
-    $("openQs").innerHTML=open.map(function(q){
+    $("openQs").innerHTML=open.map(function(q,qi){
       return '<div class="q"><div class="meta"><span class="qid">'+esc(q.id||"Q-?")+'</span>'
         +(q.blocking?'<span class="blocking">blocking</span>':"")
         +(q.ask?'<span class="ask">ask: '+esc(q.ask)+'</span>':"")+'</div>'
         +'<div class="text">'+esc(q.q||"")+'</div>'
-        +(q.why?'<div class="why">'+esc(q.why)+'</div>':"")+'</div>';
+        +(q.why?'<div class="why">'+esc(q.why)+'</div>':"")
+        +'<button class="link copyq" type="button" data-q="'+qi+'">copy for Teams</button></div>';
     }).join("")||'<div class="empty-note">None open.</div>';
 
     $("qaCount").textContent=qas.length||"";
@@ -506,6 +621,25 @@
       }).join("")
       +(rev.verified?'<div class="verified">Verified: '+esc(rev.verified)+'</div>':"")
       :'<div class="empty-note">'+(implDone?"Implementation done — Review runs the checks next.":"Appears after Review appends a verdict.")+'</div>';
+
+    /* flash the sections that actually changed on a live update */
+    if(isUpdate&&!reduced)secIds.forEach(function(id){
+      if($(id).innerHTML!==prevHTML[id]){
+        var sec=$(id).closest("section");
+        if(sec){sec.classList.remove("chg");void sec.offsetWidth;sec.classList.add("chg");
+          setTimeout(function(){sec.classList.remove("chg")},1600);}
+      }
+    });
+
+    /* tab title + favicon status dot — readable from a background tab */
+    document.title=(rev&&rev.approved?"✅ ":blockers?"⏳"+blockers+" ":"")
+      +(km?km[1]:"Task Pipeline")+" · "+s+"/100";
+    setFavicon(rev?(rev.approved?"#12A159":"#E5484D")
+      :blockers?"#F5A623":(ctxDone?"#12A159":"#8F8F8F"));
+
+    /* one-time celebration when a task turns APPROVED */
+    if(rev&&rev.approved&&!prevApproved&&!firstRender&&!reduced)confetti();
+    prevApproved=!!(rev&&rev.approved);
 
     revealAll();
     firstRender=false;
@@ -546,6 +680,37 @@
 
   $("btnOpen").addEventListener("click",openPicker);
   $("btnRefresh").addEventListener("click",refresh);
+  applyTheme(loadPref("tp-theme")||"");
+  $("btnTheme").addEventListener("click",function(){
+    var cur=loadPref("tp-theme")||"";
+    var next=cur===""?"light":cur==="light"?"dark":"";
+    storePref("tp-theme",next);applyTheme(next);
+  });
+  $("openQs").addEventListener("click",function(e){
+    var b=e.target.closest?e.target.closest(".copyq"):null;
+    if(!b)return;
+    var q=lastOpen[+b.getAttribute("data-q")];
+    if(!q)return;
+    copyText(teamsMsg(q,$("ticketKey").textContent),function(){
+      b.classList.add("did");b.textContent="copied ✓ — paste in Teams";
+      setTimeout(function(){b.classList.remove("did");b.textContent="copy for Teams";},1800);
+    });
+  });
+  document.addEventListener("keydown",function(e){
+    if(e.ctrlKey||e.metaKey||e.altKey)return;
+    var tag=(e.target.tagName||"").toLowerCase();
+    if(tag==="input"||tag==="textarea"||e.target.isContentEditable)return;
+    if(e.key==="o")openPicker();
+    else if(e.key==="r")refresh();
+    else if(demoKey&&(e.key==="1"||e.key==="2"||e.key==="3"))
+      loadDemo(["gathering","implementing","approved"][+e.key-1]);
+  });
+  setInterval(function(){
+    if(!lastLoadTs||$("board").style.display!=="block")return;
+    var secs=Math.round((Date.now()-lastLoadTs)/1000);
+    var rel=secs<8?"just now":secs<60?secs+"s ago":secs<3600?Math.round(secs/60)+"m ago":Math.round(secs/3600)+"h ago";
+    $("updated").textContent=baseUpdated+"loaded "+rel;
+  },5000);
   $("dropzone").addEventListener("click",openPicker);
   $("dropzone").addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" ")openPicker();});
   ["dragover","dragleave","drop"].forEach(function(ev){
