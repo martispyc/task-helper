@@ -1,0 +1,542 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Task Pipeline — dashboard</title>
+<style>
+  :root{
+    --paper:#FAFAF8; --ink:#151916; --muted:#71786F; --faint:#A9AFA6; --hair:#E6E8E3;
+    --green:#1E6B4E; --green-soft:#EDF4EF; --amber:#A9761C; --red:#A4402F;
+    --mono:ui-monospace,"Cascadia Mono",Consolas,"SF Mono",monospace;
+    --ease:cubic-bezier(.22,1,.36,1);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  html{background:var(--paper)}
+  body{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color:var(--ink);
+    background:var(--paper);-webkit-font-smoothing:antialiased;line-height:1.5}
+  .page{max-width:680px;margin:0 auto;padding:52px 24px 88px}
+
+  /* reveal system */
+  .rv{opacity:0;transform:translateY(12px)}
+  .rv.in{opacity:1;transform:none;transition:opacity .6s var(--ease),transform .6s var(--ease)}
+
+  .eyebrow{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted)}
+  .topbar{display:flex;justify-content:space-between;align-items:baseline;gap:16px;margin-bottom:48px}
+  .controls{display:flex;gap:18px;align-items:center;font-family:var(--mono);font-size:12px}
+  button.link{background:none;border:none;font:inherit;color:var(--ink);cursor:pointer;
+    border-bottom:1px solid var(--ink);padding:0 0 1px}
+  button.link:hover{color:var(--green);border-color:var(--green)}
+  button.link:focus-visible,.dropzone:focus-visible{outline:2px solid var(--green);outline-offset:3px}
+  .livedot{display:none;align-items:center;gap:6px;color:var(--muted)}
+  .livedot.on{display:inline-flex}
+  .livedot i{width:6px;height:6px;border-radius:50%;background:var(--green);display:inline-block;
+    animation:breathe 2.6s ease-in-out infinite}
+  @keyframes breathe{0%,100%{opacity:1}50%{opacity:.35}}
+
+  .demobar{display:none;gap:14px;align-items:baseline;font-family:var(--mono);font-size:12px;
+    color:var(--muted);margin:-24px 0 44px;flex-wrap:wrap}
+  .demobar.on{display:flex}
+  .demobar .demo-sw{color:var(--muted);border-color:var(--faint)}
+  .demobar .demo-sw.cur{color:var(--green);border-color:var(--green)}
+
+  /* pipeline strip */
+  .pipe{display:flex;align-items:center;gap:10px;margin:0 0 56px}
+  .stage{display:flex;align-items:center;gap:8px;white-space:nowrap}
+  .stage .dot{width:8px;height:8px;border-radius:50%;border:1.5px solid var(--faint);background:transparent;flex:none}
+  .stage .lbl{font-size:10.5px;letter-spacing:.12em;text-transform:uppercase;color:var(--faint)}
+  .stage.done .dot{background:var(--green);border-color:var(--green)}
+  .stage.done .lbl{color:var(--ink)}
+  .stage.active .dot{border-color:var(--green);animation:ring 2.4s var(--ease) infinite}
+  .stage.active .lbl{color:var(--green)}
+  .stage.attn .dot{background:var(--amber);border-color:var(--amber)}
+  .stage.attn .lbl{color:var(--amber)}
+  @keyframes ring{0%{box-shadow:0 0 0 0 rgba(30,107,78,.35)}70%{box-shadow:0 0 0 7px rgba(30,107,78,0)}100%{box-shadow:0 0 0 0 rgba(30,107,78,0)}}
+  .pipe .conn{flex:1;height:1px;background:var(--hair);min-width:14px}
+  .pipe .conn.done{background:var(--green)}
+
+  /* empty state */
+  .dropzone{border:1px dashed var(--faint);padding:96px 24px;text-align:center;cursor:pointer;
+    transition:border-color .3s,background .3s}
+  .dropzone.drag{border-color:var(--green);background:var(--green-soft)}
+  .dropzone h1{font-size:22px;font-weight:400;margin-bottom:10px}
+  .dropzone p{color:var(--muted);font-size:14px;max-width:42ch;margin:0 auto}
+  .dropzone .hint{margin-top:30px;font-family:var(--mono);font-size:12px;color:var(--muted)}
+  .dropzone code{font-family:var(--mono);font-size:17px}
+
+  #board{display:none}
+  .tasktitle{font-size:23px;font-weight:400;letter-spacing:-.01em;margin:6px 0 2px}
+  .updated{font-family:var(--mono);font-size:12px;color:var(--muted);transition:color .4s}
+  .updated.flash{color:var(--green)}
+
+  /* gauge */
+  .gauge{margin:60px 0 8px}
+  .score{font-size:112px;font-weight:200;letter-spacing:-.045em;line-height:1;
+    font-variant-numeric:tabular-nums;transition:color .6s var(--ease)}
+  .score small{font-size:22px;font-weight:300;color:var(--muted);letter-spacing:0}
+  .track{position:relative;height:2px;margin-top:22px;
+    background-image:linear-gradient(to right,var(--faint) 25%,transparent 25%);
+    background-size:8px 2px;background-repeat:repeat-x;background-position:0 50%}
+  .fill{position:absolute;left:0;top:0;height:2px;background:var(--ink);width:0;
+    transition:width .9s var(--ease),background .6s var(--ease)}
+  .ready .fill{background:var(--green)}
+  .ready .score{color:var(--green)}
+  .statusline{display:flex;gap:14px;align-items:center;margin-top:18px;font-size:14px;color:var(--muted);min-height:28px}
+  .stamp{display:inline-block;border:1px solid var(--green);color:var(--green);font-size:10.5px;
+    letter-spacing:.14em;text-transform:uppercase;padding:6px 11px;opacity:0;transform:translateY(4px);
+    transition:opacity .7s var(--ease) .2s,transform .7s var(--ease) .2s;visibility:hidden}
+  .ready .stamp{opacity:1;transform:none;visibility:visible}
+
+  section{margin-top:76px}
+  section>h2{font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;color:var(--muted);
+    font-weight:500;padding-bottom:12px;border-bottom:1px solid var(--hair);
+    display:flex;justify-content:space-between;align-items:baseline}
+  section>h2 .count{font-family:var(--mono);letter-spacing:0;text-transform:none;color:var(--faint)}
+
+  .dim{display:grid;grid-template-columns:230px 1fr 44px;gap:16px;align-items:center;
+    padding:15px 0;border-bottom:1px solid var(--hair)}
+  .dim .name{font-size:14px}
+  .dim .bar{position:relative;height:2px;
+    background-image:linear-gradient(to right,var(--hair) 25%,transparent 25%);
+    background-size:8px 2px;background-repeat:repeat-x;background-position:0 50%}
+  .dim .bar i{position:absolute;left:0;top:0;height:2px;background:var(--ink);width:0;
+    transition:width .8s var(--ease)}
+  .dim.full .bar i{background:var(--green)}
+  .dim.full .num{color:var(--green)}
+  .dim .num{font-family:var(--mono);font-size:13px;text-align:right;font-variant-numeric:tabular-nums}
+  .dim .missing{grid-column:1/-1;font-size:13px;color:var(--amber);margin-top:-7px;padding-bottom:7px}
+  .dim.full .missing{display:none}
+
+  /* plan steps */
+  .step{display:flex;gap:12px;align-items:baseline;padding:12px 0;border-bottom:1px solid var(--hair)}
+  .step .box{font-family:var(--mono);font-size:13px;color:var(--faint);flex:none}
+  .step.done .box{color:var(--green)}
+  .step .txt{font-size:14px}
+  .step.done .txt{color:var(--muted);text-decoration:line-through;text-decoration-color:var(--hair)}
+  .step.flag .box{color:var(--amber)}
+  .planmeta{font-family:var(--mono);font-size:12px;color:var(--muted);padding:14px 0 0}
+
+  .q{padding:18px 0;border-bottom:1px solid var(--hair)}
+  .q .meta{display:flex;gap:12px;align-items:baseline;font-family:var(--mono);font-size:12px;margin-bottom:6px}
+  .q .qid{color:var(--ink)}
+  .q .blocking{color:var(--red)}
+  .q .ask{color:var(--muted)}
+  .q .text{font-size:15px}
+  .q .why{font-size:13px;color:var(--muted);margin-top:4px}
+  .answered .qid,.answered .text{color:var(--muted)}
+  .answered .text{text-decoration:line-through;text-decoration-color:var(--hair)}
+  .answer{font-size:14px;margin-top:6px}
+  .answer b{font-weight:500;color:var(--green)}
+
+  .info{display:grid;grid-template-columns:112px 1fr;gap:16px;padding:12px 0;border-bottom:1px solid var(--hair)}
+  .info .d{font-family:var(--mono);font-size:12px;color:var(--muted);padding-top:2px}
+  .info .s{font-size:14px}
+
+  /* review verdict */
+  .verdict{padding:20px 0 4px}
+  .status{display:inline-block;font-size:10.5px;letter-spacing:.14em;text-transform:uppercase;
+    padding:6px 11px;border:1px solid var(--hair);color:var(--muted)}
+  .status.ok{border-color:var(--green);color:var(--green)}
+  .status.bad{border-color:var(--amber);color:var(--amber)}
+  .vdate{font-family:var(--mono);font-size:12px;color:var(--muted);margin-left:12px}
+  .ritem{display:flex;gap:12px;padding:13px 0;border-bottom:1px solid var(--hair);font-size:14px}
+  .ritem .rid{font-family:var(--mono);font-size:12px;color:var(--ink);flex:none;padding-top:1px}
+  .ritem .sev{font-family:var(--mono);font-size:11px;flex:none;padding-top:2px}
+  .sev.must{color:var(--red)} .sev.should{color:var(--amber)} .sev.nit{color:var(--muted)}
+  .verified{font-family:var(--mono);font-size:12px;color:var(--muted);padding:14px 0 0;white-space:pre-wrap}
+
+  .empty-note{padding:18px 0;color:var(--muted);font-size:14px}
+  footer{margin-top:100px;padding-top:16px;border-top:1px solid var(--hair);
+    display:flex;justify-content:space-between;font-family:var(--mono);font-size:11px;color:var(--muted)}
+
+  @media (max-width:560px){
+    .dim{grid-template-columns:1fr 44px}
+    .dim .bar{grid-column:1/-1;order:3}
+    .score{font-size:76px}
+    .pipe .conn{min-width:8px}
+    .stage .lbl{letter-spacing:.08em}
+  }
+  @media (prefers-reduced-motion:reduce){
+    *,*::before,*::after{animation:none!important;transition:none!important}
+    .rv{opacity:1;transform:none}
+    .stamp{opacity:1;transform:none}
+  }
+</style>
+</head>
+<body>
+<div class="page">
+  <div class="topbar rv">
+    <span class="eyebrow">Task pipeline</span>
+    <span class="controls">
+      <span class="livedot" id="livedot"><i></i>live</span>
+      <button class="link" id="btnRefresh" style="display:none">Refresh</button>
+      <button class="link" id="btnOpen">Open context.md</button>
+    </span>
+  </div>
+
+  <div class="demobar rv" id="demobar">
+    <span>sample data —</span>
+    <button class="link demo-sw" data-demo="gathering" type="button">gathering</button>
+    <button class="link demo-sw" data-demo="implementing" type="button">implementing</button>
+    <button class="link demo-sw" data-demo="approved" type="button">approved</button>
+    <span>·</span>
+    <button class="link" id="btnDemoClose" type="button">close</button>
+  </div>
+
+  <div class="dropzone rv" id="dropzone" tabindex="0" role="button" aria-label="Open a context file">
+    <h1>Drop <code>.github/task/context.md</code> here</h1>
+    <p>The file Context Getter maintains. Parsed right here in your browser — nothing is uploaded, no network calls are made.</p>
+    <div class="hint">or click to choose the file · Edge/Chrome keep it live-updating</div>
+    <div class="hint" style="margin-top:14px"><button class="link" id="btnDemo" type="button">view with sample data</button></div>
+  </div>
+
+  <div id="board">
+    <div class="pipe rv" id="pipe" aria-label="Pipeline stages"></div>
+
+    <div class="rv">
+      <div class="eyebrow" id="ticketKey"></div>
+      <h1 class="tasktitle" id="taskTitle"></h1>
+      <div class="updated" id="updated"></div>
+    </div>
+
+    <div class="gauge rv" id="gauge">
+      <div class="score"><span id="scoreNum">0</span><small> /100</small></div>
+      <div class="track"><div class="fill" id="fill"></div></div>
+      <div class="statusline">
+        <span class="stamp">Ready for planning</span>
+        <span id="statusText"></span>
+      </div>
+    </div>
+
+    <section class="rv"><h2>Confidence by dimension</h2><div id="dims"></div></section>
+    <section class="rv" id="secPlan"><h2>Plan <span class="count" id="planCount"></span></h2><div id="steps"></div></section>
+    <section class="rv"><h2>Open questions <span class="count" id="openCount"></span></h2><div id="openQs"></div></section>
+    <section class="rv"><h2>Answered <span class="count" id="qaCount"></span></h2><div id="qas"></div></section>
+    <section class="rv"><h2>Additional info <span class="count" id="infoCount"></span></h2><div id="infos"></div></section>
+    <section class="rv" id="secReview"><h2>Review</h2><div id="review"></div></section>
+
+    <footer class="rv">
+      <span>parsed locally · no data leaves this machine</span>
+      <span id="fname"></span>
+    </footer>
+  </div>
+</div>
+
+<input type="file" id="fileInput" accept=".md,text/markdown,text/plain" style="display:none">
+
+<script>
+(function(){
+  "use strict";
+  var fileHandle=null,pollTimer=null,lastMod=0,lastText="",prevScore=0,firstRender=true;
+  var reduced=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+  var $=function(id){return document.getElementById(id)};
+
+  /* ---------- parsing ---------- */
+  function sections(md){
+    var out={},cur=null,lines=md.split(/\r?\n/),title="";
+    for(var i=0;i<lines.length;i++){
+      var l=lines[i];
+      if(!title&&/^#\s+/.test(l)){title=l.replace(/^#\s+/,"").trim();continue;}
+      var m=l.match(/^##\s+(.+)$/);
+      if(m){cur=m[1].trim().toLowerCase();out[cur]=[];continue;}
+      if(cur)out[cur].push(l);
+    }
+    for(var k in out)out[k]=out[k].join("\n");
+    return {title:title,sec:out};
+  }
+  function stripComments(t){return (t||"").replace(/<!--[\s\S]*?-->/g,"").trim();}
+  function parseConfidence(txt){
+    txt=txt||"";
+    var o={overall:null,ready:false,updated:"",dims:[],override:null};
+    var m=txt.match(/OVERALL:\s*(\d+)\s*\/\s*100\s*[—-]?\s*([^\(\n]*)/i);
+    if(m){o.overall=parseInt(m[1],10);o.ready=/READY FOR PLANNING/i.test(m[2])&&!/NOT\s+READY/i.test(m[2]);}
+    var u=txt.match(/\(updated\s+([^)]+)\)/i);if(u)o.updated=u[1].trim();
+    var ov=txt.match(/^OVERRIDE:.*$/im);if(ov)o.override=ov[0];
+    var re=/^-\s+([^:\n]+):\s*(\d+)(?:\s*[—-]\s*(.*))?$/gm,d;
+    while((d=re.exec(txt))!==null)o.dims.push({name:d[1].trim(),score:parseInt(d[2],10),note:(d[3]||"").trim()});
+    return o;
+  }
+  function parseQuestions(txt){
+    var items=[];if(!txt)return items;
+    txt.split(/^###\s+/m).slice(1).forEach(function(p){
+      var head=p.split("\n")[0]||"";
+      items.push({
+        id:(head.match(/Q-\d+/)||[""])[0],
+        blocking:/blocking/i.test(head),
+        done:/✅/.test(head),
+        ask:(head.match(/ask:\s*(.+)$/i)||[,""])[1].trim(),
+        by:(head.match(/answered by\s*([^,]+)/i)||[,""])[1].trim(),
+        q:(p.match(/\*\*Question:\*\*\s*([\s\S]*?)(?=\n\*\*|\n###|$)/)||[,""])[1].trim(),
+        why:(p.match(/\*\*Why it matters:\*\*\s*([\s\S]*?)(?=\n\*\*|\n###|$)/)||[,""])[1].trim(),
+        a:(p.match(/\*\*Answer:\*\*\s*([\s\S]*?)(?=\n\*\*|\n###|$)/)||[,""])[1].trim()
+      });
+    });
+    return items;
+  }
+  function parseInfo(txt){
+    var items=[];if(!txt)return items;
+    var re=/^###\s+(\d{4}-\d{2}-\d{2})\s*[—-]\s*(.+)$/gm,m;
+    while((m=re.exec(txt))!==null)items.push({date:m[1],src:m[2].trim()});
+    return items;
+  }
+  function parseSteps(txt){
+    var items=[];if(!txt)return items;
+    var re=/^\s*-\s*\[([ xX])\]\s*(.+)$/gm,m;
+    while((m=re.exec(txt))!==null){
+      var t=m[2].trim();
+      items.push({done:m[1].toLowerCase()==="x",text:t,flag:/needs planning/i.test(t)});
+    }
+    return items;
+  }
+  function parseReview(txt){
+    if(!txt)return null;
+    var blocks=txt.split(/^###\s+Verdict\s*[—-]\s*/m).slice(1);
+    if(!blocks.length)return null;
+    var b=blocks[blocks.length-1];
+    var date=(b.split("\n")[0]||"").trim();
+    var st=(b.match(/^STATUS:\s*(.+)$/im)||[,""])[1].trim();
+    var items=[];var re=/^-\s*(R\d+)\s*(?:\[([^\]]+)\])?\s*(.*)$/gm,m;
+    while((m=re.exec(b))!==null)items.push({id:m[1],sev:(m[2]||"").trim(),text:m[3].trim()});
+    var ver=(b.match(/^Verified:\s*([\s\S]*)$/im)||[,""])[1].trim();
+    return {date:date,status:st,approved:/APPROVED/i.test(st),items:items,verified:ver};
+  }
+
+  /* ---------- animation helpers ---------- */
+  function countUp(el,from,to,ms){
+    if(reduced||from===to){el.textContent=to;return;}
+    var t0=null;
+    function tick(ts){
+      if(!t0)t0=ts;
+      var p=Math.min(1,(ts-t0)/ms);
+      var e=1-Math.pow(1-p,3);
+      el.textContent=Math.round(from+(to-from)*e);
+      if(p<1)requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+  }
+  function revealAll(){
+    if(reduced){document.querySelectorAll(".rv").forEach(function(n){n.classList.add("in")});return;}
+    var nodes=document.querySelectorAll(".rv:not(.in)"),i=0;
+    nodes.forEach(function(n){
+      setTimeout(function(){n.classList.add("in")},i*55);i++;
+    });
+  }
+
+  /* ---------- rendering ---------- */
+  function esc(s){var d=document.createElement("div");d.textContent=s;return d.innerHTML;}
+  function stageHTML(states){
+    var names=["Context","Plan","Implement","Review"],h="";
+    for(var i=0;i<4;i++){
+      h+='<span class="stage '+states[i]+'"><span class="dot"></span><span class="lbl">'+names[i]+'</span></span>';
+      if(i<3)h+='<span class="conn'+(states[i]==="done"?" done":"")+'"></span>';
+    }
+    return h;
+  }
+  function render(md,fileName,isUpdate){
+    var p=sections(md);
+    var conf=parseConfidence(p.sec["confidence"]);
+    var open=parseQuestions(p.sec["open questions"]).filter(function(q){return !q.done});
+    var qas=parseQuestions(p.sec["q&a"]||p.sec["qa"]);
+    var infos=parseInfo(p.sec["additional info"]);
+    var planTxt=stripComments(p.sec["planning"]);
+    var steps=parseSteps(planTxt);
+    var rev=parseReview(p.sec["review"]);
+
+    $("dropzone").style.display="none";
+    $("board").style.display="block";
+    $("btnRefresh").style.display="inline";
+
+    /* title */
+    var t=p.title||"Untitled task";
+    var km=t.match(/^([A-Z][A-Z0-9]+-\d+)\s*[—-]\s*(.*)$/);
+    $("ticketKey").textContent=km?km[1]:"";
+    $("taskTitle").textContent=km?km[2]:t.replace(/^<|>$/g,"");
+    var up=$("updated");
+    up.textContent=(conf.updated?"scored "+conf.updated+" · ":"")+"loaded "+new Date().toLocaleTimeString();
+    if(isUpdate&&!reduced){up.classList.add("flash");setTimeout(function(){up.classList.remove("flash")},900);}
+    $("fname").textContent=fileName||"";
+
+    /* stages */
+    var s=(conf.overall==null)?0:conf.overall;
+    var ctxDone=(s===100||conf.ready);
+    var doneSteps=steps.filter(function(x){return x.done}).length;
+    var planDone=steps.length>0;
+    var implDone=planDone&&doneSteps===steps.length;
+    var states=[
+      ctxDone?"done":"active",
+      planDone?"done":(ctxDone?"active":""),
+      implDone?"done":(doneSteps>0||planDone?"active":""),
+      rev?(rev.approved?"done":"attn"):(implDone?"active":"")
+    ];
+    $("pipe").innerHTML=stageHTML(states);
+
+    /* gauge */
+    $("gauge").classList.toggle("ready",ctxDone);
+    countUp($("scoreNum"),firstRender?0:prevScore,s,800);
+    prevScore=s;
+    requestAnimationFrame(function(){$("fill").style.width=s+"%";});
+    var blockers=open.filter(function(q){return q.blocking}).length;
+    $("statusText").textContent=ctxDone?(planDone?"":"hand off to Planner")
+      :(conf.override?conf.override
+      :"not ready · "+(blockers?blockers+" blocking question"+(blockers>1?"s":"")+" open":"gaps listed below"));
+
+    /* dimensions */
+    var dh="";
+    conf.dims.forEach(function(d,i){
+      dh+='<div class="dim'+(d.score>=100?" full":"")+'">'
+        +'<span class="name">'+esc(d.name)+'</span>'
+        +'<span class="bar"><i data-w="'+Math.max(0,Math.min(100,d.score))+'" style="transition-delay:'+(firstRender?i*70:0)+'ms"></i></span>'
+        +'<span class="num">'+d.score+'</span>'
+        +(d.note?'<span class="missing">'+esc(d.note)+'</span>':"")
+        +'</div>';
+    });
+    $("dims").innerHTML=dh||'<div class="empty-note">No dimension scores yet — Context Getter writes them under ## Confidence.</div>';
+    requestAnimationFrame(function(){
+      document.querySelectorAll("#dims .bar i").forEach(function(b){b.style.width=b.getAttribute("data-w")+"%";});
+    });
+
+    /* plan */
+    $("planCount").textContent=planDone?doneSteps+" / "+steps.length:"";
+    $("steps").innerHTML=planDone?steps.map(function(st){
+      return '<div class="step'+(st.done?" done":"")+(st.flag?" flag":"")+'">'
+        +'<span class="box">'+(st.done?"[x]":st.flag?"[⏳]":"[ ]")+'</span>'
+        +'<span class="txt">'+esc(st.text)+'</span></div>';
+    }).join("")+(implDone?'<div class="planmeta">all steps done — over to Review</div>':"")
+    :'<div class="empty-note">'+(ctxDone?"Context is ready — the Planner writes steps under ## Planning.":"Unlocks when context reaches 100.")+'</div>';
+
+    /* questions */
+    $("openCount").textContent=open.length||"";
+    $("openQs").innerHTML=open.map(function(q){
+      return '<div class="q"><div class="meta"><span class="qid">'+esc(q.id||"Q-?")+'</span>'
+        +(q.blocking?'<span class="blocking">blocking</span>':"")
+        +(q.ask?'<span class="ask">ask: '+esc(q.ask)+'</span>':"")+'</div>'
+        +'<div class="text">'+esc(q.q||"")+'</div>'
+        +(q.why?'<div class="why">'+esc(q.why)+'</div>':"")+'</div>';
+    }).join("")||'<div class="empty-note">None open.</div>';
+
+    $("qaCount").textContent=qas.length||"";
+    $("qas").innerHTML=qas.map(function(q){
+      return '<div class="q answered"><div class="meta"><span class="qid">'+esc(q.id||"Q-?")+'</span>'
+        +(q.by?'<span class="ask">answered by '+esc(q.by)+'</span>':"")+'</div>'
+        +'<div class="text">'+esc(q.q||"")+'</div>'
+        +(q.a?'<div class="answer"><b>A</b> '+esc(q.a)+'</div>':"")+'</div>';
+    }).join("")||'<div class="empty-note">Nothing answered yet.</div>';
+
+    /* info */
+    $("infoCount").textContent=infos.length||"";
+    $("infos").innerHTML=infos.map(function(i){
+      return '<div class="info"><span class="d">'+esc(i.date)+'</span><span class="s">'+esc(i.src)+'</span></div>';
+    }).join("")||'<div class="empty-note">Nothing collected yet — paste material to Context Getter.</div>';
+
+    /* review */
+    $("review").innerHTML=rev?
+      '<div class="verdict"><span class="status '+(rev.approved?"ok":"bad")+'">'+esc(rev.status||"verdict")+'</span>'
+      +(rev.date?'<span class="vdate">'+esc(rev.date)+'</span>':"")+'</div>'
+      +rev.items.map(function(r){
+        var cls=/must/i.test(r.sev)?"must":/should/i.test(r.sev)?"should":"nit";
+        return '<div class="ritem"><span class="rid">'+esc(r.id)+'</span>'
+          +(r.sev?'<span class="sev '+cls+'">'+esc(r.sev)+'</span>':"")
+          +'<span>'+esc(r.text)+'</span></div>';
+      }).join("")
+      +(rev.verified?'<div class="verified">Verified: '+esc(rev.verified)+'</div>':"")
+      :'<div class="empty-note">'+(implDone?"Implementation done — Review runs the checks next.":"Appears after Review appends a verdict.")+'</div>';
+
+    revealAll();
+    firstRender=false;
+  }
+
+  /* ---------- file access ---------- */
+  function readText(file,name){
+    var r=new FileReader();
+    r.onload=function(){demoOff();var upd=lastText!==""&&lastText!==r.result;lastText=r.result;render(lastText,name||file.name,upd);};
+    r.readAsText(file);
+  }
+  async function openPicker(){
+    if(window.showOpenFilePicker){
+      try{
+        var hs=await window.showOpenFilePicker({types:[{description:"Markdown",accept:{"text/markdown":[".md"]}}]});
+        fileHandle=hs[0];
+        var f=await fileHandle.getFile();lastMod=f.lastModified;
+        readText(f,fileHandle.name);
+        startPolling();
+      }catch(e){/* cancelled */}
+    }else{$("fileInput").click();}
+  }
+  function startPolling(){
+    if(pollTimer)clearInterval(pollTimer);
+    $("livedot").classList.add("on");
+    pollTimer=setInterval(async function(){
+      if(!fileHandle)return;
+      try{
+        var f=await fileHandle.getFile();
+        if(f.lastModified!==lastMod){lastMod=f.lastModified;readText(f,fileHandle.name);}
+      }catch(e){clearInterval(pollTimer);$("livedot").classList.remove("on");}
+    },2500);
+  }
+  async function refresh(){
+    if(fileHandle){var f=await fileHandle.getFile();lastMod=f.lastModified;readText(f,fileHandle.name);}
+    else if(lastText){render(lastText,$("fname").textContent,false);}
+  }
+
+  $("btnOpen").addEventListener("click",openPicker);
+  $("btnRefresh").addEventListener("click",refresh);
+  $("dropzone").addEventListener("click",openPicker);
+  $("dropzone").addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" ")openPicker();});
+  ["dragover","dragleave","drop"].forEach(function(ev){
+    document.body.addEventListener(ev,function(e){
+      e.preventDefault();
+      $("dropzone").classList.toggle("drag",ev==="dragover");
+      if(ev==="drop"&&e.dataTransfer.files.length){fileHandle=null;$("livedot").classList.remove("on");readText(e.dataTransfer.files[0]);}
+    });
+  });
+  $("fileInput").addEventListener("change",function(e){if(e.target.files.length)readText(e.target.files[0]);});
+
+  /* ---------- sample data ---------- */
+  var demoKey=null;
+  function demoOff(){demoKey=null;$("demobar").classList.remove("on");}
+  var DEMO_TOP="# KIDS-1428 — Session timeout warning modal in onboarding\n\n";
+  var DEMO_INFO="## Additional info\n### 2026-07-03 — Jira comment (E. Ozola, design)\nModal uses the shared ds-modal component; countdown in brand amber. Figma: \"KIDS timeout v2\".\n### 2026-07-04 — Teams, senior dev\nIdle tracking exists twice — IdleService (legacy) and SessionActivityService. One is dead code.\n### 2026-07-06 — code check\nOnboarding shell verified ✅ apps/kids-onboarding-mfe/src/app/shell/onboarding-shell.component.ts. Both idle services present under core/.\n\n";
+  var DEMO_QA_DONE="## Q&A\n### Q-0 ✅ — answered by E. Ozola, 2026-07-03\n**Question:** Is there an approved design for the warning modal?\n**Answer:** Yes — Figma \"KIDS timeout v2\", built on ds-modal.\n### Q-1 ✅ — answered by Jira reporter, 2026-07-06\n**Question:** If the session expires mid-step, do we restore that step after re-auth or restart onboarding?\n**Answer:** Restore the step — progress must survive re-auth.\n### Q-2 ✅ — answered by senior dev, 2026-07-06\n**Question:** Which idle tracker is live in prod?\n**Answer:** SessionActivityService. IdleService is dead code, slated for deletion.\n\n";
+  var DEMO_CONF_100="## Confidence\nOVERALL: 100/100 — READY FOR PLANNING ✅   (updated 2026-07-06)\n- goal & why: 100\n- done-definition: 100\n- scope boundaries: 100\n- code context: 100\n- dependencies & environment: 100\n- blocking questions: 100 — 0 open\n\n";
+  var DEMO_PLAN_HEAD="## Planning\n### 1 · Task summary\nT-60s session-timeout warning modal in kids onboarding; Continue extends the session, mid-step expiry restores the step after re-auth.\n\n### 3 · Implementation steps\n";
+  var DEMOS={
+    gathering: DEMO_TOP
+      +"## Confidence\nOVERALL: 60/100 — NOT READY   (updated 2026-07-06)\n- goal & why: 90 — 🟡 business driver inferred from ticket text, not yet confirmed\n- done-definition: 60 — missing: behaviour when the session expires mid-step (Q-1)\n- scope boundaries: 80 — missing: parent-consent screen in or out? (Q-3)\n- code context: 60 — entry component verified ✅; unclear which idle service is live (Q-2)\n- dependencies & environment: 70 — missing: test user with an expirable session\n- blocking questions: 70 — 2 open (Q-1, Q-2)\n\n"
+      +"## Ticket\nAs a child completing onboarding, I want a warning before my session times out, so I don't lose my progress.\nAcceptance: warning modal at T-60s with countdown; Continue extends the session.\n\n"
+      +DEMO_INFO
+      +"## Open questions\n### Q-1 ⏳ blocking — ask: Jira reporter\n**Question:** If the session expires mid-step, do we restore that step after re-auth or restart onboarding?\n**Why it matters:** Defines the done-condition and what state must be persisted.\n**Best guess:** Restore the step (guess)\n### Q-2 ⏳ blocking — ask: senior dev, kids-onboarding-mfe\n**Question:** Which idle tracker is live in prod — IdleService or SessionActivityService?\n**Why it matters:** The modal must hook into the real one; the other is dead code.\n**Best guess:** SessionActivityService (guess)\n### Q-3 ⏳ nice-to-know — ask: QA\n**Question:** Is the parent-consent screen inside this timeout scope?\n**Why it matters:** Affects where the warning must appear.\n**Best guess:** Out of scope (guess)\n\n"
+      +"## Q&A\n### Q-0 ✅ — answered by E. Ozola, 2026-07-03\n**Question:** Is there an approved design for the warning modal?\n**Answer:** Yes — Figma \"KIDS timeout v2\", built on ds-modal.\n\n## Planning\n",
+    implementing: DEMO_TOP+DEMO_CONF_100
+      +"## Ticket\nAs a child completing onboarding, I want a warning before my session times out, so I don't lose my progress.\n\n"
+      +DEMO_INFO+"## Open questions\n\n"+DEMO_QA_DONE
+      +DEMO_PLAN_HEAD
+      +"- [x] Step 1 — Define SessionTimeoutState interface (models/session-timeout.state.ts)\n- [x] Step 2 — TimeoutWarningService with countdown stream (AsyncPipe-ready)\n- [x] Step 3 — Warning modal component on ds-modal\n- [x] Step 4 — Hook SessionActivityService T-60s trigger in the onboarding shell\n- [ ] Step 5 — Persist current step for post-re-auth restore — needs planning ⏳ (restore API unclear)\n- [ ] Step 6 — Extend-session call + error path\n- [ ] Step 7 — Unit tests per §5 (countdown, modal render, extend flow)\n\n"
+      +"## Review\n### Verdict — 2026-07-06\nSTATUS: REJECTED — RETURN TO IMPLEMENTER\n- R1 [must-fix] timeout-warning.service.ts:41 — countdown interval never torn down on modal dismiss; use takeUntil(destroy$) per framework rules\n- R2 [should-fix] warning-modal.component.html:12 — @for over actions is missing track\n- R3 [nit] session-timeout.state.ts — rename remainingSecs to remainingSeconds for consistency\nVerified: npx tsc --noEmit ✓ · ng build ✓ · ng test ChromeHeadless — 2 failing (countdown teardown spec)\n",
+    approved: DEMO_TOP+DEMO_CONF_100
+      +"## Ticket\nAs a child completing onboarding, I want a warning before my session times out, so I don't lose my progress.\n\n"
+      +DEMO_INFO+"## Open questions\n\n"+DEMO_QA_DONE
+      +DEMO_PLAN_HEAD
+      +"- [x] Step 1 — Define SessionTimeoutState interface (models/session-timeout.state.ts)\n- [x] Step 2 — TimeoutWarningService with countdown stream (AsyncPipe-ready)\n- [x] Step 3 — Warning modal component on ds-modal\n- [x] Step 4 — Hook SessionActivityService T-60s trigger in the onboarding shell\n- [x] Step 5 — Persist current step via OnboardingProgressService for post-re-auth restore\n- [x] Step 6 — Extend-session call + error path\n- [x] Step 7 — Unit tests per §5 (countdown, modal render, extend flow)\n\n"
+      +"## Review\n### Verdict — 2026-07-06\nSTATUS: APPROVED\nVerified: npx tsc --noEmit ✓ · ng build ✓ · ng test ChromeHeadless — 34/34 ✓ · all 7 plan steps confirmed\n"
+  };
+  function loadDemo(k){
+    fileHandle=null;
+    if(pollTimer)clearInterval(pollTimer);
+    $("livedot").classList.remove("on");
+    demoKey=k;lastText=DEMOS[k];
+    $("demobar").classList.add("on");
+    document.querySelectorAll(".demo-sw").forEach(function(b){b.classList.toggle("cur",b.getAttribute("data-demo")===k)});
+    render(lastText,"sample data · "+k,false);
+  }
+  $("btnDemo").addEventListener("click",function(e){e.stopPropagation();loadDemo("implementing");});
+  document.querySelectorAll(".demo-sw").forEach(function(b){b.addEventListener("click",function(){loadDemo(b.getAttribute("data-demo"))})});
+  $("btnDemoClose").addEventListener("click",function(){
+    demoOff();lastText="";prevScore=0;firstRender=true;
+    $("board").style.display="none";$("dropzone").style.display="block";
+  });
+
+  revealAll();
+})();
+</script>
+</body>
+</html>
