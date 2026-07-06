@@ -74,9 +74,9 @@ Nordic-minimal: paper `#FAFAF8`, ink `#151916`, pine `#1E6B4E`, amber `#A9761C` 
 
 ## Scripts
 
-- `install.sh` / `install.ps1` — run FROM a target project's root: removes only our four agent files + `.github/task-helper/`, copies fresh bundle, ensures `.github/task/` + gitignore. Preserves task data; `--reset-task` / `-ResetTask` archives context.md to `.github/task/archive/` first.
+- `install.sh` / `install.ps1` — run from the target project's root OR from inside the imported repo folder (then it installs into the parent): removes only our four agent files + `.github/task-helper/` + the old root dashboard, copies fresh bundle, ensures `.github/task/` + gitignore, prints a quick usage tutorial, then deletes the imported repo folder itself when it sits inside the target project (`--keep-source` / `-KeepSource` skips that; a source outside the project is never touched). Preserves task data; `--reset-task` / `-ResetTask` archives context.md to `.github/task/archive/` first.
 - `export-txt.sh` — builds `export/` with every deliverable as `<name>.txt` for the email route.
-- `setup.ps1` / `setup.sh` — receiving-side: strip `.txt`, place files (used only on the email route; git route uses install.*).
+- `setup.ps1` / `setup.sh` — receiving-side: strip `.txt`, place files, delete the setup scripts + leftover transfer files, print the same tutorial (used only on the email route; git route uses install.*).
 
 ## Working in this repo
 

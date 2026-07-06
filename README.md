@@ -13,11 +13,13 @@ Four GitHub Copilot agents that take a Jira ticket from raw context to reviewed 
 
 ```
 cd <your-project>
-git clone <this-repo>            # or git -C <path> pull if already cloned somewhere
-bash <path>/task-pipeline/install.sh          # Windows: powershell -ExecutionPolicy Bypass -File install.ps1
+git clone <this-repo>            # drop it right into the project root
+bash task-helper/install.sh      # Windows: powershell -ExecutionPolicy Bypass -File task-helper\install.ps1
 ```
 
-The script removes only this pipeline's four old agent files and `.github/task-helper/`, copies the fresh bundle, drops `task-dashboard.html` in the root, and gitignores `.github/task/`. **Task data is preserved** across updates; add `--reset-task` / `-ResetTask` to archive `context.md` to `.github/task/archive/` and start clean.
+One run does everything: it removes this pipeline's old files (the four agent files, `.github/task-helper/`, the old root `task-dashboard.html`), puts every fresh file where it belongs, gitignores `.github/task/`, prints a quick usage tutorial, and finally **deletes the imported repo folder itself** — your project root stays clean. Running it from inside the imported folder works too (it installs into the parent). To update later, just import the repo again and re-run install.
+
+**Task data is preserved** across updates; add `--reset-task` / `-ResetTask` to archive `context.md` to `.github/task/archive/` and start clean. Add `--keep-source` / `-KeepSource` to keep the imported folder around.
 
 Then reload VS Code → pick **Context Getter**. Agents are pinned to Claude Opus 4.8 (falls back to Sonnet 4.6; Copilot admins must enable the Opus 4.8 model policy).
 
