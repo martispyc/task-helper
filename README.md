@@ -46,7 +46,9 @@ bash task-helper/install.sh --shared "$HOME/SEB/Task Pipeline - kids-onboarding-
 
 ## Dashboard
 
-Open `task-dashboard.html` in Edge/Chrome → Open `.github/task/context.md` (or drag it in); it live-follows while agents write. Zero network — nothing leaves the machine. **Feel it first:** click "view with sample data" (three states: gathering → implementing → approved) or open `.github/task-helper/context-example.md` and edit it while watching.
+Open `task-dashboard.html` in Edge/Chrome → Open `.github/task/context.md` (or drag it in); it live-follows while agents write. Zero network — nothing leaves the machine.
+
+**You only pick the file once.** The dashboard remembers it (locally, in the browser): next time it either reopens it automatically or shows a one-click **Resume context.md** button — no file dialog. Point it at your OneDrive-synced shared task folder once and from then on it's open-and-watch while teammates' agents write. ("forget this file" clears the memory.) **Feel it first:** click "view with sample data" (three states: gathering → implementing → approved) or open `.github/task-helper/context-example.md` and edit it while watching.
 
 It also works for you, not just at you: the status line always names the next move; every open question has a **copy for Teams** button that produces a ready-to-paste colleague message; sections flash when a live update changes them; the tab title + favicon dot show score/blockers from a background tab; theme toggles auto/light/dark; keys `o` open, `r` refresh, `1/2/3` samples — and yes, there's confetti when Review stamps APPROVED.
 

@@ -243,6 +243,10 @@
 
   #confetti{position:fixed;inset:0;pointer-events:none;z-index:99}
   #btnTheme{font-family:var(--mono);font-size:12px}
+
+  /* resume last file */
+  .resume{margin-top:26px;display:flex;gap:16px;justify-content:center;align-items:center;flex-wrap:wrap}
+  #resumeName{font-family:var(--mono);font-weight:400}
   footer{margin-top:36px;padding-top:16px;border-top:1px solid var(--border);
     display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
     font-family:var(--mono);font-size:11px;color:var(--faint)}
@@ -290,6 +294,10 @@
     <p>The file Context Getter maintains. Parsed right here in your browser — nothing is uploaded, no network calls are made.</p>
     <div class="hint">or click to choose the file · Edge/Chrome keep it live-updating</div>
     <div class="hint" style="margin-top:14px"><button class="link" id="btnDemo" type="button">view with sample data</button></div>
+    <div class="resume" id="resume" style="display:none">
+      <button class="btn primary" id="btnResume" type="button">Resume <span id="resumeName">context.md</span></button>
+      <button class="link" id="btnForget" type="button">forget this file</button>
+    </div>
     <div class="how" aria-label="How the pipeline works">
       <span><b>1 · Context Getter</b>collects everything, scores it 0–100</span>
       <span><b>2 · Planner</b>at 100/100, writes the step plan</span>
@@ -651,14 +659,65 @@
     r.onload=function(){demoOff();var upd=lastText!==""&&lastText!==r.result;lastText=r.result;render(lastText,name||file.name,upd);};
     r.readAsText(file);
   }
+
+  /* remembered file handle (IndexedDB) — reopen without the picker next time */
+  function idb(){return new Promise(function(res,rej){
+    if(!window.indexedDB)return rej(new Error("no idb"));
+    var r=indexedDB.open("taskpipeline",1);
+    r.onupgradeneeded=function(){r.result.createObjectStore("kv")};
+    r.onsuccess=function(){res(r.result)};
+    r.onerror=function(){rej(r.error)};
+  })}
+  function idbSet(k,v){return idb().then(function(db){return new Promise(function(res,rej){
+    var t=db.transaction("kv","readwrite");t.objectStore("kv").put(v,k);
+    t.oncomplete=function(){db.close();res()};t.onerror=function(){db.close();rej(t.error)};
+  })})}
+  function idbGet(k){return idb().then(function(db){return new Promise(function(res,rej){
+    var q=db.transaction("kv","readonly").objectStore("kv").get(k);
+    q.onsuccess=function(){db.close();res(q.result)};q.onerror=function(){db.close();rej(q.error)};
+  })})}
+  function rememberHandle(h){idbSet("handle",h).catch(function(){})}
+  function forgetHandle(){idbSet("handle",null).catch(function(){})}
+
+  function adoptHandle(h,readNow){
+    fileHandle=h;rememberHandle(h);
+    h.getFile().then(function(f){
+      lastMod=f.lastModified;
+      if(readNow)readText(f,h.name);
+      startPolling();
+    }).catch(function(){fileHandle=null;forgetHandle();});
+  }
+  function offerResume(h){
+    $("resumeName").textContent=h.name||"context.md";
+    $("resume").style.display="flex";
+    $("btnResume").onclick=function(e){
+      e.stopPropagation();
+      h.requestPermission({mode:"read"}).then(function(p){
+        if(p==="granted")adoptHandle(h,true);
+        else{$("resume").style.display="none";forgetHandle();}
+      }).catch(function(){$("resume").style.display="none";forgetHandle();});
+    };
+    $("btnForget").onclick=function(e){
+      e.stopPropagation();
+      $("resume").style.display="none";forgetHandle();
+    };
+  }
+  function tryResume(){
+    if(!window.showOpenFilePicker)return;
+    idbGet("handle").then(function(h){
+      if(!h||!h.queryPermission)return;
+      h.queryPermission({mode:"read"}).then(function(p){
+        if(p==="granted")adoptHandle(h,true);      /* fully automatic */
+        else if(p==="prompt")offerResume(h);       /* one click instead of the picker */
+      }).catch(function(){});
+    }).catch(function(){});
+  }
+
   async function openPicker(){
     if(window.showOpenFilePicker){
       try{
         var hs=await window.showOpenFilePicker({types:[{description:"Markdown",accept:{"text/markdown":[".md"]}}]});
-        fileHandle=hs[0];
-        var f=await fileHandle.getFile();lastMod=f.lastModified;
-        readText(f,fileHandle.name);
-        startPolling();
+        adoptHandle(hs[0],true);
       }catch(e){/* cancelled */}
     }else{$("fileInput").click();}
   }
@@ -717,7 +776,17 @@
     document.body.addEventListener(ev,function(e){
       e.preventDefault();
       $("dropzone").classList.toggle("drag",ev==="dragover");
-      if(ev==="drop"&&e.dataTransfer.files.length){fileHandle=null;$("livedot").classList.remove("on");readText(e.dataTransfer.files[0]);}
+      if(ev==="drop"&&e.dataTransfer.files.length){
+        fileHandle=null;$("livedot").classList.remove("on");
+        /* grab a real handle from the drop when the browser offers one —
+           makes even drag-drop remembered + live-followed */
+        var it=e.dataTransfer.items&&e.dataTransfer.items[0];
+        if(it&&it.getAsFileSystemHandle)
+          it.getAsFileSystemHandle().then(function(h){
+            if(h&&h.kind==="file")adoptHandle(h,false);
+          }).catch(function(){});
+        readText(e.dataTransfer.files[0]);
+      }
     });
   });
   $("fileInput").addEventListener("change",function(e){if(e.target.files.length)readText(e.target.files[0]);});
@@ -767,6 +836,7 @@
   });
 
   revealAll();
+  tryResume();
 })();
 </script>
 </body>
