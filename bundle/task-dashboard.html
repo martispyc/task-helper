@@ -95,10 +95,6 @@
   .demobar{display:none;gap:8px;align-items:center;font-family:var(--mono);font-size:12px;
     color:var(--faint);margin:-4px 0 20px;flex-wrap:wrap}
   .demobar.on{display:flex}
-  .demobar .demo-sw{text-decoration:none;border:1px solid var(--border);border-radius:999px;
-    padding:4px 12px;color:var(--muted)}
-  .demobar .demo-sw:hover{border-color:var(--border-hi);color:var(--text)}
-  .demobar .demo-sw.cur{border-color:var(--green-line);color:var(--green);background:var(--green-dim)}
 
   /* pipeline strip */
   .pipe{display:flex;align-items:center;gap:10px;margin:0 0 16px;padding:0 4px}
@@ -301,10 +297,7 @@
   </div>
 
   <div class="demobar rv" id="demobar">
-    <span>sample data —</span>
-    <button class="link demo-sw" data-demo="gathering" type="button">gathering</button>
-    <button class="link demo-sw" data-demo="implementing" type="button">implementing</button>
-    <button class="link demo-sw" data-demo="approved" type="button">approved</button>
+    <span>sample data — a three-ticket workspace; switch with the chips below</span>
     <span>·</span>
     <button class="link" id="btnDemoClose" type="button">close</button>
   </div>
@@ -355,7 +348,7 @@
 
     <footer class="rv">
       <span>parsed locally · no data leaves this machine</span>
-      <span>keys: <b>o</b> open · <b>r</b> refresh · <b>[ ]</b> ticket · <b>1/2/3</b> samples</span>
+      <span>keys: <b>o</b> open · <b>r</b> refresh · <b>[ ] 1-3</b> ticket</span>
       <span id="fname"></span>
     </footer>
   </div>
@@ -824,8 +817,11 @@
       var f=await t.handle.getFile();
       if(activeKey!==key)return;       /* a faster switch won the race */
       lastMod=f.lastModified;
-      readText(f,(dirHandle?dirHandle.name+"/":"")+key+"/context.md");
-      startPolling();
+      var txt=await f.text();
+      if(activeKey!==key)return;
+      lastText=txt;
+      render(txt,(dirHandle?dirHandle.name+"/":"")+key+"/context.md",false);
+      if(!demoKey)startPolling();      /* no fake "live" dot on sample data */
     }catch(e){}
     buildSwitcher();
   }
@@ -978,8 +974,10 @@
       idx=(idx+(e.key==="]"?1:wsTasks.length-1))%wsTasks.length;
       switchTask(wsTasks[idx].key);
     }
-    else if(demoKey&&(e.key==="1"||e.key==="2"||e.key==="3"))
-      loadDemo(["gathering","implementing","approved"][+e.key-1]);
+    else if(dirHandle&&(e.key==="1"||e.key==="2"||e.key==="3")){
+      var wt=wsTasks[+e.key-1];
+      if(wt)switchTask(wt.key);
+    }
   });
   setInterval(function(){
     if(!lastLoadTs||$("board").style.display!=="block")return;
@@ -1012,13 +1010,27 @@
   /* ---------- sample data ---------- */
   var demoKey=null;
   function demoOff(){demoKey=null;$("demobar").classList.remove("on");}
+  function fakeFileHandle(name,text){
+    var file=new File([text],name,{type:"text/markdown",lastModified:1751500000000});
+    return {kind:"file",name:name,getFile:function(){return Promise.resolve(file)}};
+  }
   var DEMO_TOP="# KIDS-1428 — Session timeout warning modal in onboarding\n\n";
+  var DEMO_TOP_G="# KIDS-1433 — Session-expiry recovery in onboarding\n\n";
+  var DEMO_TOP_A="# IB-877 — Timeout warning rollout to ib-platform\n\n";
+  var DEMO_TEAM="# Team context\n\n"
+    +"## Facts\n"
+    +"- Deploys to the test env go out Tuesdays — book QA before Monday noon.\n"
+    +"- **SessionActivityService** is the live idle tracker; IdleService is dead code.\n"
+    +"- Shared UI components live in the ds-* library; check there before building new ones.\n\n"
+    +"## Shared notes\n\n"
+    +"### 2026-07-04 — Teams, senior dev\n"
+    +"Mid-step session expiry must restore the step after re-auth — product decision, applies to every onboarding ticket.\n";
   var DEMO_INFO="## Additional info\n### 2026-07-03 — Jira comment (E. Ozola, design)\nModal uses the shared ds-modal component; countdown in brand amber. Figma: \"KIDS timeout v2\".\n### 2026-07-04 — Teams, senior dev\nIdle tracking exists twice — IdleService (legacy) and SessionActivityService. One is dead code.\n### 2026-07-06 — code check\nOnboarding shell verified ✅ apps/kids-onboarding-mfe/src/app/shell/onboarding-shell.component.ts. Both idle services present under core/.\n\n";
   var DEMO_QA_DONE="## Q&A\n### Q-0 ✅ — answered by E. Ozola, 2026-07-03\n**Question:** Is there an approved design for the warning modal?\n**Answer:** Yes — Figma \"KIDS timeout v2\", built on ds-modal.\n### Q-1 ✅ — answered by Jira reporter, 2026-07-06\n**Question:** If the session expires mid-step, do we restore that step after re-auth or restart onboarding?\n**Answer:** Restore the step — progress must survive re-auth.\n### Q-2 ✅ — answered by senior dev, 2026-07-06\n**Question:** Which idle tracker is live in prod?\n**Answer:** SessionActivityService. IdleService is dead code, slated for deletion.\n\n";
   var DEMO_CONF_100="## Confidence\nOVERALL: 100/100 — READY FOR PLANNING ✅   (updated 2026-07-06)\n- goal & why: 100\n- done-definition: 100\n- scope boundaries: 100\n- code context: 100\n- dependencies & environment: 100\n- blocking questions: 100 — 0 open\n\n";
   var DEMO_PLAN_HEAD="## Planning\n### 1 · Task summary\nT-60s session-timeout warning modal in kids onboarding; Continue extends the session, mid-step expiry restores the step after re-auth.\n\n### 3 · Implementation steps\n";
   var DEMOS={
-    gathering: DEMO_TOP
+    gathering: DEMO_TOP_G
       +"## Confidence\nOVERALL: 60/100 — NOT READY   (updated 2026-07-06)\n- goal & why: 90 — 🟡 business driver inferred from ticket text, not yet confirmed\n- done-definition: 60 — missing: behaviour when the session expires mid-step (Q-1)\n- scope boundaries: 80 — missing: parent-consent screen in or out? (Q-3)\n- code context: 60 — entry component verified ✅; unclear which idle service is live (Q-2)\n- dependencies & environment: 70 — missing: test user with an expirable session\n- blocking questions: 70 — 2 open (Q-1, Q-2)\n\n"
       +"## Ticket\nAs a child completing onboarding, I want a warning before my session times out, so I don't lose my progress.\nAcceptance: warning modal at T-60s with countdown; Continue extends the session.\n\n"
       +DEMO_INFO
@@ -1030,27 +1042,37 @@
       +DEMO_PLAN_HEAD
       +"- [x] Step 1 — Define SessionTimeoutState interface (models/session-timeout.state.ts)\n- [x] Step 2 — TimeoutWarningService with countdown stream (AsyncPipe-ready)\n- [x] Step 3 — Warning modal component on ds-modal\n- [x] Step 4 — Hook SessionActivityService T-60s trigger in the onboarding shell\n- [ ] Step 5 — Persist current step for post-re-auth restore — needs planning ⏳ (restore API unclear)\n- [ ] Step 6 — Extend-session call + error path\n- [ ] Step 7 — Unit tests per §5 (countdown, modal render, extend flow)\n\n"
       +"## Review\n### Verdict — 2026-07-06\nSTATUS: REJECTED — RETURN TO IMPLEMENTER\n- R1 [must-fix] timeout-warning.service.ts:41 — countdown interval never torn down on modal dismiss; use takeUntil(destroy$) per framework rules\n- R2 [should-fix] warning-modal.component.html:12 — @for over actions is missing track\n- R3 [nit] session-timeout.state.ts — rename remainingSecs to remainingSeconds for consistency\nVerified: npx tsc --noEmit ✓ · ng build ✓ · ng test ChromeHeadless — 2 failing (countdown teardown spec)\n",
-    approved: DEMO_TOP+DEMO_CONF_100
+    approved: DEMO_TOP_A+DEMO_CONF_100
       +"## Ticket\nAs a child completing onboarding, I want a warning before my session times out, so I don't lose my progress.\n\n"
       +DEMO_INFO+"## Open questions\n\n"+DEMO_QA_DONE
       +DEMO_PLAN_HEAD
       +"- [x] Step 1 — Define SessionTimeoutState interface (models/session-timeout.state.ts)\n- [x] Step 2 — TimeoutWarningService with countdown stream (AsyncPipe-ready)\n- [x] Step 3 — Warning modal component on ds-modal\n- [x] Step 4 — Hook SessionActivityService T-60s trigger in the onboarding shell\n- [x] Step 5 — Persist current step via OnboardingProgressService for post-re-auth restore\n- [x] Step 6 — Extend-session call + error path\n- [x] Step 7 — Unit tests per §5 (countdown, modal render, extend flow)\n\n"
-      +"## Review\n### Verdict — 2026-07-06\nSTATUS: APPROVED\nVerified: npx tsc --noEmit ✓ · ng build ✓ · ng test ChromeHeadless — 34/34 ✓ · all 7 plan steps confirmed\n"
+      +"## Review\n### Verdict — 2026-07-06\nSTATUS: APPROVED\nVerified: npx tsc --noEmit ✓ · ng build ✓ · npx nx test ib-platform — 34/34 ✓ · all 7 plan steps confirmed\n"
   };
-  function loadDemo(k){
+  function loadDemo(){
     closeWorkspace(true);
     fileHandle=null;
     if(pollTimer)clearInterval(pollTimer);
     $("livedot").classList.remove("on");
-    demoKey=k;lastText=DEMOS[k];
+    demoKey="ws";
+    dirHandle={name:"sample workspace"};   /* truthy sentinel — no dir polling started */
+    wsTasks=[   /* pipeline order: gathering → implementing → approved */
+      {key:"KIDS-1433",handle:fakeFileHandle("context.md",DEMOS.gathering)},
+      {key:"KIDS-1428",handle:fakeFileHandle("context.md",DEMOS.implementing)},
+      {key:"IB-877",handle:fakeFileHandle("context.md",DEMOS.approved)}
+    ];
+    teamHandle=fakeFileHandle("team.md",DEMO_TEAM);teamMod=0;
     $("demobar").classList.add("on");
-    document.querySelectorAll(".demo-sw").forEach(function(b){b.classList.toggle("cur",b.getAttribute("data-demo")===k)});
-    render(lastText,"sample data · "+k,false);
+    refreshBadges().then(function(){
+      buildSwitcher();
+      switchTask("KIDS-1428");
+      loadTeam();
+    });
   }
-  $("btnDemo").addEventListener("click",function(e){e.stopPropagation();loadDemo("implementing");});
-  document.querySelectorAll(".demo-sw").forEach(function(b){b.addEventListener("click",function(){loadDemo(b.getAttribute("data-demo"))})});
+  $("btnDemo").addEventListener("click",function(e){e.stopPropagation();loadDemo();});
   $("btnDemoClose").addEventListener("click",function(){
-    demoOff();lastText="";prevScore=0;firstRender=true;
+    demoOff();closeWorkspace(true);
+    lastText="";prevScore=0;firstRender=true;
     $("board").style.display="none";$("dropzone").style.display="block";
     tryResume();   /* straight back into the real workspace if one is remembered */
   });
