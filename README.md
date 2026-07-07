@@ -23,25 +23,28 @@ One run does everything: it removes this pipeline's old files (the four agent fi
 
 Then reload VS Code → pick **Context Getter**. Agents are pinned to Claude Opus 4.8 (falls back to Sonnet 4.6; Copilot admins must enable the Opus 4.8 model policy).
 
-## The team workspace (SharePoint/OneDrive) — full guide in [SHAREPOINT-SETUP.md](SHAREPOINT-SETUP.md)
+## The workspace — fully local by default
 
-Every ticket has its own context; one `team.md` is the super context every agent reads on every ticket:
+Every machine gets its own workspace (gitignored), scaffolded by the installer:
 
 ```
-.github/task/                  ← local, or a junction into the OneDrive-synced SharePoint library
-├── team.md                    ← shared across ALL tickets (humans edit; Context Getter appends on request)
+.github/task/
+├── team.md                    ← your cross-ticket context: every agent reads it on every ticket
+│                               (you edit it; Context Getter appends on request)
 ├── tasks/<KEY>/context.md     ← one folder per Jira ticket
 └── archive/
 ```
 
-Point the install at your synced library and the whole team shares it — every dashboard live-follows every ticket, and SharePoint's built-in version history covers each save of the context files:
+**No OneDrive / no shared drive? This is the mode for you** — everything works locally, and context moves person-to-person instead: the dashboard's **copy for Teams** button for questions, and pasting `team.md` blocks or a whole `context.md` to a teammate (their Context Getter files it under the right ticket). Nothing is lost except live-watching each other's dashboards.
+
+**If you do have any shared folder that shows up in File Explorer** — an OneDrive-synced SharePoint library *or a mapped network drive* — one flag shares the whole workspace (live dashboards for everyone; SharePoint adds version history). Full guide: [SHAREPOINT-SETUP.md](SHAREPOINT-SETUP.md).
 
 ```
-bash task-helper/install.sh --shared "$HOME/SEB/Task Pipeline - kids-onboarding-mfe"
-# Windows: ...install.ps1 -Shared "C:\Users\you\SEB\Task Pipeline - kids-onboarding-mfe"
+bash task-helper/install.sh --shared "<path to the shared folder>"
+# Windows: ...install.ps1 -Shared "<same path>"
 ```
 
-`.github/task/` becomes a link into the synced folder (junction on Windows — no admin rights needed); an old single `context.md` is migrated into `tasks/` automatically. **Single-writer convention:** agents run on ONE machine per ticket (its owner's); everyone else watches via the dashboard.
+`.github/task/` becomes a link into it (junction on Windows — no admin rights needed); existing local tickets migrate in automatically. **Single-writer convention:** agents run on ONE machine per ticket (its owner's).
 
 ## Install via email (.txt route — when git can't reach)
 

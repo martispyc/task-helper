@@ -5,6 +5,14 @@ document library; OneDrive syncs it to each intern's machine as a plain local fo
 agents write there and everyone's dashboard live-follows. Nothing leaves the M365
 tenant, no new server, no firewall exception — and SharePoint versions every save.
 
+> **No OneDrive sync client on your machine?** Common on locked-down corporate builds.
+> Two fallbacks: **(a)** a mapped network drive works exactly the same — skip step 2 and
+> pass the drive path to `--shared` (you lose SharePoint version history but keep live
+> sharing); **(b)** skip sharing entirely — the pipeline is **fully local by default**
+> (same layout, same dashboard, same agents) and context moves person-to-person: the
+> dashboard's copy-for-Teams buttons, and pasting `team.md` blocks or whole `context.md`
+> files over Teams. Everything else in this guide is then optional reading.
+
 ## 1 · Create the shared library (once, any of you)
 
 1. Go to your team's SharePoint site (or make one: SharePoint start page → **Create site** → Team site).
