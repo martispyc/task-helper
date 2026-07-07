@@ -260,10 +260,14 @@
   .tchip.ghost{border-style:dashed;box-shadow:none;color:var(--faint)}
 
   /* compose — talk to the agents */
-  .compose textarea{width:100%;resize:vertical;min-height:60px;font:inherit;font-size:13.5px;color:var(--text);
+  .compose textarea,#newTicket textarea{width:100%;resize:vertical;min-height:60px;font:inherit;font-size:13.5px;color:var(--text);
     background:var(--inset);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:14px}
-  .compose textarea::placeholder{color:var(--faint)}
-  .compose textarea:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+  .compose textarea::placeholder,#newTicket textarea::placeholder,#ntKey::placeholder{color:var(--faint)}
+  .compose textarea:focus-visible,#newTicket textarea:focus-visible,#ntKey:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+  .btn.mini{height:26px;padding:0 11px;font-size:12px}
+  .ntrow{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap}
+  #ntKey{width:200px;font-family:var(--mono);font-size:13px;color:var(--text);background:var(--inset);
+    border:1px solid var(--border);border-radius:8px;padding:0 12px;height:36px;text-transform:uppercase}
   .composerow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0 8px;flex-wrap:wrap}
   .composehint{font-family:var(--mono);font-size:11px;color:var(--faint)}
 
@@ -310,10 +314,20 @@
     <button class="link" id="btnDemoClose" type="button">close</button>
   </div>
 
+  <section id="newTicket" style="display:none">
+    <h2><span>New ticket</span><button class="link" id="btnNtClose" type="button">close</button></h2>
+    <div class="ntrow">
+      <input id="ntKey" placeholder="TICKET-123" spellcheck="false" autocomplete="off">
+      <button class="btn primary" id="btnNtStart" type="button">Start with AI</button>
+    </div>
+    <textarea id="ntCtx" rows="4" placeholder="Paste the Jira ticket and anything else you already have — chat snippets, links, notes. The Context Getter files it all and scores the meter."></textarea>
+    <div class="composehint" style="padding:10px 0 8px">copies the kickoff prompt and opens VS Code (pick “Context Getter”) — the ticket appears here as the agent writes</div>
+  </section>
+
   <div class="dropzone rv" id="dropzone" tabindex="0" role="button" aria-label="Open the task folder or a context file">
     <h1>Drop your <code>.github/task</code> folder here</h1>
     <p>The team workspace: every ticket's context.md plus the shared team.md. Parsed right here in your browser — nothing is uploaded, no network calls are made.</p>
-    <div class="hint">or click to choose it · Edge/Chrome keep it live-updating · <button class="link" id="btnOpenFile" type="button">open a single context.md instead</button></div>
+    <div class="hint">or click to choose it · Edge/Chrome keep it live-updating · <button class="link" id="btnOpenFile" type="button">open a single context.md instead</button> · <button class="link" id="btnNewTicketDz" type="button">start a new ticket with AI</button></div>
     <div class="hint" style="margin-top:14px"><button class="link" id="btnDemo" type="button">view with sample data</button></div>
     <div class="resume" id="resume" style="display:none">
       <button class="btn primary" id="btnResume" type="button">Resume <span id="resumeName">context.md</span></button>
@@ -342,6 +356,7 @@
         <div class="statusline" aria-live="polite">
           <span class="stamp">Ready for planning</span>
           <span id="statusText"></span>
+          <button class="btn ghost mini" id="btnAct" type="button" style="display:none"></button>
         </div>
       </div>
     </div>
@@ -358,7 +373,7 @@
 
     <section class="rv"><h2>Confidence by dimension</h2><div id="dims"></div></section>
     <section class="rv" id="secPlan"><h2>Plan <span class="count" id="planCount"></span></h2><div id="steps"></div></section>
-    <section class="rv"><h2>Open questions <span class="count" id="openCount"></span></h2><div id="openQs"></div></section>
+    <section class="rv"><h2><span>Open questions <span class="count" id="openCount"></span></span><button class="link" id="btnMoreQs" type="button">+ generate more</button></h2><div id="openQs"></div></section>
     <section class="rv"><h2>Answered <span class="count" id="qaCount"></span></h2><div id="qas"></div></section>
     <section class="rv"><h2>Additional info <span class="count" id="infoCount"></span></h2><div id="infos"></div></section>
     <section class="rv" id="secReview"><h2>Review</h2><div id="review"></div></section>
@@ -366,7 +381,7 @@
 
     <footer class="rv">
       <span>parsed locally · no data leaves this machine</span>
-      <span>keys: <b>o</b> open · <b>r</b> refresh · <b>[ ] 1-3</b> ticket</span>
+      <span>keys: <b>o</b> open · <b>n</b> new ticket · <b>r</b> refresh · <b>[ ] 1-3</b> ticket</span>
       <span id="fname"></span>
     </footer>
   </div>
@@ -616,6 +631,20 @@
     if(activeConflict)nextMsg="⚠ OneDrive conflict copy in this ticket folder — merge & delete it · "+nextMsg;
     $("statusText").textContent=nextMsg;
 
+    /* state-matched AI action — one click assembles the right prompt */
+    var K=km?km[1]:"";
+    var P=function(t){return (K?K+": ":"")+t};
+    if(rev&&rev.approved)lastAct=null;
+    else if(rev)lastAct={label:"fix R-items → Implementer",prompt:P("apply the R-items from the latest verdict under ## Review, one at a time.")};
+    else if(flagged)lastAct={label:"resolve flags → Planner",prompt:P("some steps are flagged needs planning ⏳ — resolve the ambiguity and update those steps in place.")};
+    else if(implDone)lastAct={label:"run Review → Review",prompt:P("implementation is complete — run the checks and append a verdict under ## Review.")};
+    else if(planDone)lastAct={label:"next step → Implementer",prompt:P("continue with the next unchecked step.")};
+    else if(ctxDone)lastAct={label:"make the plan → Planner",prompt:P("context is 100/100 — organize it and write the plan under ## Planning.")};
+    else lastAct={label:"ask AI for questions → Context Getter",prompt:P("generate questions — scan the ticket, additional info and code for gaps across requirements, technical, and environment; add them to ## Open questions.")};
+    var ab=$("btnAct");
+    if(lastAct){ab.textContent=lastAct.label;ab.style.display="inline-flex";}
+    else ab.style.display="none";
+
     /* dimensions */
     var dh="";
     conf.dims.forEach(function(d,i){
@@ -650,7 +679,8 @@
         +'<div class="text">'+esc(q.q||"")+'</div>'
         +(q.why?'<div class="why">'+esc(q.why)+'</div>':"")
         +'<button class="link copyq" type="button" data-q="'+qi+'" data-lang="en">copy for Teams · EN</button>'
-        +'<button class="link copyq" type="button" data-q="'+qi+'" data-lang="lv">LV</button></div>';
+        +'<button class="link copyq" type="button" data-q="'+qi+'" data-lang="lv">LV</button>'
+        +'<button class="link copyq ansq" type="button" data-q="'+qi+'">answer → AI</button></div>';
     }).join("")||'<div class="empty-note">None open.</div>';
 
     $("qaCount").textContent=qas.length||"";
@@ -837,7 +867,8 @@
         +(typeof t.score==="number"?'<em>'+t.score+'</em>':"")
         +(t.blockers?'<u>⏳'+t.blockers+'</u>':"")
         +(t.conflict?'<u class="cf">⚠</u>':"")+'</button>';
-    }).join("")+'<button type="button" class="tchip ghost" id="btnCloseWs">close folder</button>';
+    }).join("")+'<button type="button" class="tchip ghost" id="btnNewTicket">+ new ticket</button>'
+    +'<button type="button" class="tchip ghost" id="btnCloseWs">close folder</button>';
   }
   async function switchTask(key){
     var t=null;
@@ -967,6 +998,7 @@
   $("switcher").addEventListener("click",function(e){
     var b=e.target.closest?e.target.closest("button"):null;
     if(!b)return;
+    if(b.id==="btnNewTicket"){toggleNewTicket(true);return;}
     if(b.id==="btnCloseWs"){
       closeWorkspace(true);   /* closing the view keeps the remembered handle */
       if(pollTimer)clearInterval(pollTimer);
@@ -989,6 +1021,17 @@
     if(!b)return;
     var q=lastOpen[+b.getAttribute("data-q")];
     if(!q)return;
+    if(b.classList.contains("ansq")){
+      /* prefill the compose box with an answer-filing template */
+      var ta=$("composeText"),ph="<paste the answer here>";
+      var tpl=(q.id||"Q")+" answered by "+(q.ask||"<who>")+": "+ph;
+      ta.value=tpl;
+      ta.scrollIntoView({behavior:"smooth",block:"center"});
+      ta.focus();
+      var i=tpl.indexOf(ph);
+      if(i>=0)ta.setSelectionRange(i,i+ph.length);
+      return;
+    }
     copyText(teamsMsg(q,$("ticketKey").textContent,b.getAttribute("data-lang")),function(){
       var orig=b.getAttribute("data-label")||b.textContent;
       b.setAttribute("data-label",orig);
@@ -996,23 +1039,56 @@
       setTimeout(function(){b.classList.remove("did");b.textContent=orig;},1800);
     });
   });
+  /* one launcher for every AI action: copy the prompt, hand off to the local editor
+     (protocol launch, not a network call) — the clipboard is the guaranteed path */
+  function aiHandoff(msg,btn,restoreLabel){
+    copyText(msg,function(){
+      if(btn){
+        btn.textContent="copied ✓ — paste in Copilot";
+        setTimeout(function(){btn.textContent=restoreLabel},2200);
+      }
+      try{window.location.href="vscode://GitHub.Copilot-Chat/chat?query="+encodeURIComponent(msg);}catch(e){}
+    });
+  }
   function sendCompose(){
     var t=$("composeText").value.trim();
     if(!t)return;
     var key=$("ticketKey").textContent;
     var msg=(key&&t.toUpperCase().indexOf(key)!==0?key+": ":"")+t;
-    copyText(msg,function(){
-      var b=$("btnCompose");
-      b.textContent="copied ✓ — paste in Copilot";
-      setTimeout(function(){b.textContent="Send to VS Code"},2200);
-      $("composeText").value="";
-      /* protocol handoff to the local editor — not a network call */
-      try{window.location.href="vscode://GitHub.Copilot-Chat/chat?query="+encodeURIComponent(msg);}catch(e){}
-    });
+    $("composeText").value="";
+    aiHandoff(msg,$("btnCompose"),"Send to VS Code");
   }
   $("btnCompose").addEventListener("click",sendCompose);
   $("composeText").addEventListener("keydown",function(e){
     if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendCompose();}
+  });
+  var lastAct=null;
+  $("btnAct").addEventListener("click",function(){
+    if(lastAct)aiHandoff(lastAct.prompt,$("btnAct"),lastAct.label);
+  });
+  function genQsPrompt(more){
+    var K=$("ticketKey").textContent;
+    return (K?K+": ":"")+"generate "+(more?"more ":"")+"questions — scan the ticket, additional info and code for gaps across requirements, technical, and environment; add them to ## Open questions.";
+  }
+  $("btnMoreQs").addEventListener("click",function(){
+    aiHandoff(genQsPrompt(true),$("btnMoreQs"),"+ generate more");
+  });
+  /* new-ticket kickoff */
+  function toggleNewTicket(show){
+    $("newTicket").style.display=show?"block":"none";
+    if(show)$("ntKey").focus();
+  }
+  $("btnNewTicketDz").addEventListener("click",function(e){e.stopPropagation();toggleNewTicket(true);});
+  $("btnNtClose").addEventListener("click",function(){toggleNewTicket(false);});
+  $("btnNtStart").addEventListener("click",function(){
+    var key=$("ntKey").value.trim().toUpperCase();
+    if(!key){$("ntKey").focus();return;}
+    var ctx=$("ntCtx").value.trim();
+    var msg=key+": new ticket — create tasks/"+key+"/context.md from the template, file the material below under ## Ticket / ## Additional info, then score the confidence meter:\n\n"
+      +(ctx||"(no material yet — ask me for the ticket text)");
+    aiHandoff(msg,$("btnNtStart"),"Start with AI");
+    $("ntKey").value="";$("ntCtx").value="";
+    setTimeout(function(){toggleNewTicket(false)},1500);
   });
   document.addEventListener("keydown",function(e){
     if(e.ctrlKey||e.metaKey||e.altKey)return;
@@ -1020,6 +1096,7 @@
     if(tag==="input"||tag==="textarea"||e.target.isContentEditable)return;
     if(e.key==="o")openWorkspace();
     else if(e.key==="r")refresh();
+    else if(e.key==="n"){e.preventDefault();toggleNewTicket(true);}
     else if(dirHandle&&(e.key==="["||e.key==="]")){
       if(!wsTasks.length)return;
       var idx=0;
