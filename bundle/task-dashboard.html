@@ -259,6 +259,14 @@
   .tchip u.cf{color:var(--red)}
   .tchip.ghost{border-style:dashed;box-shadow:none;color:var(--faint)}
 
+  /* compose — talk to the agents */
+  .compose textarea{width:100%;resize:vertical;min-height:60px;font:inherit;font-size:13.5px;color:var(--text);
+    background:var(--inset);border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-top:14px}
+  .compose textarea::placeholder{color:var(--faint)}
+  .compose textarea:focus-visible{outline:2px solid var(--blue);outline-offset:1px}
+  .composerow{display:flex;justify-content:space-between;align-items:center;gap:12px;padding:10px 0 8px;flex-wrap:wrap}
+  .composehint{font-family:var(--mono);font-size:11px;color:var(--faint)}
+
   /* team context card */
   .tc-h2{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:12px 0 4px}
   .tc-h{font-family:var(--mono);font-size:12px;color:var(--green);padding:10px 0 2px}
@@ -337,6 +345,16 @@
         </div>
       </div>
     </div>
+
+    <section class="rv" id="secCompose"><h2>Message the agents</h2>
+      <div class="compose">
+        <textarea id="composeText" rows="2" placeholder="Type to the pipeline — the active ticket key is prefixed automatically, so the agent knows which ticket you mean."></textarea>
+        <div class="composerow">
+          <span class="composehint">copies the message and opens VS Code — paste with Ctrl+V if the chat doesn't prefill</span>
+          <button class="btn primary" id="btnCompose" type="button">Send to VS Code</button>
+        </div>
+      </div>
+    </section>
 
     <section class="rv"><h2>Confidence by dimension</h2><div id="dims"></div></section>
     <section class="rv" id="secPlan"><h2>Plan <span class="count" id="planCount"></span></h2><div id="steps"></div></section>
@@ -960,6 +978,24 @@
       b.classList.add("did");b.textContent="copied ✓ — paste in Teams";
       setTimeout(function(){b.classList.remove("did");b.textContent="copy for Teams";},1800);
     });
+  });
+  function sendCompose(){
+    var t=$("composeText").value.trim();
+    if(!t)return;
+    var key=$("ticketKey").textContent;
+    var msg=(key&&t.toUpperCase().indexOf(key)!==0?key+": ":"")+t;
+    copyText(msg,function(){
+      var b=$("btnCompose");
+      b.textContent="copied ✓ — paste in Copilot";
+      setTimeout(function(){b.textContent="Send to VS Code"},2200);
+      $("composeText").value="";
+      /* protocol handoff to the local editor — not a network call */
+      try{window.location.href="vscode://GitHub.Copilot-Chat/chat?query="+encodeURIComponent(msg);}catch(e){}
+    });
+  }
+  $("btnCompose").addEventListener("click",sendCompose);
+  $("composeText").addEventListener("keydown",function(e){
+    if(e.key==="Enter"&&!e.shiftKey){e.preventDefault();sendCompose();}
   });
   document.addEventListener("keydown",function(e){
     if(e.ctrlKey||e.metaKey||e.altKey)return;
