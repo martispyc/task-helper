@@ -223,7 +223,7 @@
   .empty-note{padding:14px 0;color:var(--faint);font-size:13.5px}
 
   /* copy-for-Teams */
-  .copyq{margin-top:8px;font-family:var(--mono);font-size:11.5px}
+  .copyq{margin-top:8px;margin-right:14px;font-family:var(--mono);font-size:11.5px}
   .copyq.did{color:var(--green);text-decoration:none}
 
   /* live-change flash on sections */
@@ -430,6 +430,9 @@
         q:(p.match(/\*\*Question:\*\*\s*([\s\S]*?)(?=\n\*\*|\n###|$)/)||[,""])[1].trim(),
         why:(p.match(/\*\*Why it matters:\*\*\s*([\s\S]*?)(?=\n\*\*|\n###|$)/)||[,""])[1].trim(),
         guess:(p.match(/\*\*Best guess:\*\*\s*([\s\S]*?)(?=\n\*\*|\n###|$)/)||[,""])[1].trim(),
+        qLv:(p.match(/\*\*Question \(LV\):\*\*\s*([\s\S]*?)(?=\n\*\*|\n###|$)/)||[,""])[1].trim(),
+        whyLv:(p.match(/\*\*Why it matters \(LV\):\*\*\s*([\s\S]*?)(?=\n\*\*|\n###|$)/)||[,""])[1].trim(),
+        guessLv:(p.match(/\*\*Best guess \(LV\):\*\*\s*([\s\S]*?)(?=\n\*\*|\n###|$)/)||[,""])[1].trim(),
         a:(p.match(/\*\*Answer:\*\*\s*([\s\S]*?)(?=\n\*\*|\n###|$)/)||[,""])[1].trim()
       });
     });
@@ -518,7 +521,18 @@
       else if(c.parentNode)c.parentNode.removeChild(c);
     })();
   }
-  function teamsMsg(q,key){
+  function teamsMsg(q,key,lang){
+    if(lang==="lv"){
+      /* framing in Latvian; the body prefers the (LV) fields when the file has them */
+      var why=q.whyLv||q.why,guess=q.guessLv||q.guess;
+      return "Sveiki! Ātrs jautājums par "+(key||"mūsu uzdevumu")
+        +(q.ask?" (jautāju Tev kā: "+q.ask+")":"")+":\n\n"
+        +(q.qLv||q.q||"")+"\n\n"
+        +(why?"Kāpēc tas ir svarīgi: "+why+"\n":"")
+        +(guess?"Mūsu pašreizējais minējums: "+guess+"\n":"")
+        +"\n"+(q.blocking?"Tas bloķē plānošanu":"Tas nebloķē darbu, bet palīdzētu plānošanai")
+        +" ("+(q.id||"Q")+"). Paldies!";
+    }
     return "Hi! Quick question about "+(key||"our task")
       +(q.ask?" (asking you as: "+q.ask+")":"")+":\n\n"
       +(q.q||"")+"\n\n"
@@ -635,7 +649,8 @@
         +(q.ask?'<span class="ask">ask: '+esc(q.ask)+'</span>':"")+'</div>'
         +'<div class="text">'+esc(q.q||"")+'</div>'
         +(q.why?'<div class="why">'+esc(q.why)+'</div>':"")
-        +'<button class="link copyq" type="button" data-q="'+qi+'">copy for Teams</button></div>';
+        +'<button class="link copyq" type="button" data-q="'+qi+'" data-lang="en">copy for Teams · EN</button>'
+        +'<button class="link copyq" type="button" data-q="'+qi+'" data-lang="lv">LV</button></div>';
     }).join("")||'<div class="empty-note">None open.</div>';
 
     $("qaCount").textContent=qas.length||"";
@@ -974,9 +989,11 @@
     if(!b)return;
     var q=lastOpen[+b.getAttribute("data-q")];
     if(!q)return;
-    copyText(teamsMsg(q,$("ticketKey").textContent),function(){
+    copyText(teamsMsg(q,$("ticketKey").textContent,b.getAttribute("data-lang")),function(){
+      var orig=b.getAttribute("data-label")||b.textContent;
+      b.setAttribute("data-label",orig);
       b.classList.add("did");b.textContent="copied ✓ — paste in Teams";
-      setTimeout(function(){b.classList.remove("did");b.textContent="copy for Teams";},1800);
+      setTimeout(function(){b.classList.remove("did");b.textContent=orig;},1800);
     });
   });
   function sendCompose(){
@@ -1070,7 +1087,7 @@
       +"## Confidence\nOVERALL: 60/100 — NOT READY   (updated 2026-07-06)\n- goal & why: 90 — 🟡 business driver inferred from ticket text, not yet confirmed\n- done-definition: 60 — missing: behaviour when the session expires mid-step (Q-1)\n- scope boundaries: 80 — missing: parent-consent screen in or out? (Q-3)\n- code context: 60 — entry component verified ✅; unclear which idle service is live (Q-2)\n- dependencies & environment: 70 — missing: test user with an expirable session\n- blocking questions: 70 — 2 open (Q-1, Q-2)\n\n"
       +"## Ticket\nAs a child completing onboarding, I want a warning before my session times out, so I don't lose my progress.\nAcceptance: warning modal at T-60s with countdown; Continue extends the session.\n\n"
       +DEMO_INFO
-      +"## Open questions\n### Q-1 ⏳ blocking — ask: Jira reporter\n**Question:** If the session expires mid-step, do we restore that step after re-auth or restart onboarding?\n**Why it matters:** Defines the done-condition and what state must be persisted.\n**Best guess:** Restore the step (guess)\n### Q-2 ⏳ blocking — ask: senior dev, kids-onboarding-mfe\n**Question:** Which idle tracker is live in prod — IdleService or SessionActivityService?\n**Why it matters:** The modal must hook into the real one; the other is dead code.\n**Best guess:** SessionActivityService (guess)\n### Q-3 ⏳ nice-to-know — ask: QA\n**Question:** Is the parent-consent screen inside this timeout scope?\n**Why it matters:** Affects where the warning must appear.\n**Best guess:** Out of scope (guess)\n\n"
+      +"## Open questions\n### Q-1 ⏳ blocking — ask: Jira reporter\n**Question:** If the session expires mid-step, do we restore that step after re-auth or restart onboarding?\n**Question (LV):** Ja sesija beidzas soļa vidū — vai pēc atkārtotas autentifikācijas atjaunojam to pašu soli, vai onboarding sākas no sākuma?\n**Why it matters:** Defines the done-condition and what state must be persisted.\n**Why it matters (LV):** Nosaka gatavības kritēriju un to, kāds stāvoklis jāsaglabā.\n**Best guess:** Restore the step (guess)\n### Q-2 ⏳ blocking — ask: senior dev, kids-onboarding-mfe\n**Question:** Which idle tracker is live in prod — IdleService or SessionActivityService?\n**Why it matters:** The modal must hook into the real one; the other is dead code.\n**Best guess:** SessionActivityService (guess)\n### Q-3 ⏳ nice-to-know — ask: QA\n**Question:** Is the parent-consent screen inside this timeout scope?\n**Why it matters:** Affects where the warning must appear.\n**Best guess:** Out of scope (guess)\n\n"
       +"## Q&A\n### Q-0 ✅ — answered by E. Ozola, 2026-07-03\n**Question:** Is there an approved design for the warning modal?\n**Answer:** Yes — Figma \"KIDS timeout v2\", built on ds-modal.\n\n## Planning\n",
     implementing: DEMO_TOP+DEMO_CONF_100
       +"## Ticket\nAs a child completing onboarding, I want a warning before my session times out, so I don't lose my progress.\n\n"

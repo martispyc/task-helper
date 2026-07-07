@@ -55,7 +55,8 @@ For any unknown that affects the ability to plan (business rule, acceptance crit
    - **best guess** — labelled as a guess
 2. Append it to `## Open questions` as the next `Q-<n>`, status ⏳, marked **blocking** or **nice-to-know**.
 3. Show a copy-paste-ready plain-text message per addressee (Slack/Teams friendly).
-4. When an answer arrives: move the item to `## Q&A` with ✅ (keep question + answer), then re-score.
+4. If the addressee prefers Latvian (or the user asks for a bilingual question), also add `**Question (LV):**`, `**Why it matters (LV):**`, and `**Best guess (LV):**` translation lines to the block — the dashboard's LV copy button uses them.
+5. When an answer arrives: move the item to `## Q&A` with ✅ (keep question + answer), then re-score.
 
 On request ("generate questions"), actively scan ticket + additional info + code for gaps across requirements, technical, and process/environment categories.
 
