@@ -81,10 +81,28 @@ if ($Shared) {
   New-Item -ItemType Directory -Force $taskDir | Out-Null
 }
 
-if ($ResetTask -and (Test-Path .github\task\context.md)) {
+# ── workspace layout: per-ticket folders + shared team context
+New-Item -ItemType Directory -Force .github\task\tasks | Out-Null
+if (-not (Test-Path .github\task\team.md)) {
+  Copy-Item (Join-Path $src '.github\task-helper\team-template.md') .github\task\team.md
+}
+
+# migrate a v1 single-task layout into its own ticket folder
+if (Test-Path .github\task\context.md) {
+  $h1 = (Select-String -Path .github\task\context.md -Pattern '^# ' | Select-Object -First 1).Line
+  $key = if ($h1 -match '[A-Z][A-Z0-9]+-\d+') { $Matches[0] } else { 'migrated' }
+  New-Item -ItemType Directory -Force ".github\task\tasks\$key" | Out-Null
+  $dest = ".github\task\tasks\$key\context.md"
+  if (Test-Path $dest) { $dest = ".github\task\tasks\$key\{0}-context.md" -f (Get-Date -Format 'yyyy-MM-dd-HHmm') }
+  Move-Item .github\task\context.md $dest
+  Write-Host "migrated old context.md -> tasks\$key\"
+}
+
+if ($ResetTask -and (Get-ChildItem .github\task\tasks -Force -ErrorAction SilentlyContinue)) {
   New-Item -ItemType Directory -Force .github\task\archive | Out-Null
-  Move-Item .github\task\context.md (".github\task\archive\{0}-context.md" -f (Get-Date -Format 'yyyy-MM-dd-HHmm')) -Force
-  Write-Host "task data archived to .github\task\archive\"
+  Move-Item .github\task\tasks (".github\task\archive\{0}-tasks" -f (Get-Date -Format 'yyyy-MM-dd-HHmm'))
+  New-Item -ItemType Directory -Force .github\task\tasks | Out-Null
+  Write-Host "all ticket contexts archived to .github\task\archive\"
 }
 
 if (-not (Test-Path .gitignore) -or -not (Select-String -Path .gitignore -Pattern '^\.github/task/$' -Quiet)) {
@@ -113,31 +131,37 @@ Task Pipeline installed ✅
 ── Quick tutorial ────────────────────────────────────────────────
  1. Reload VS Code  (Ctrl+Shift+P → "Developer: Reload Window").
  2. Open Copilot Chat → agent picker → "Context Getter".
- 3. Paste your Jira ticket. Feed it chats/docs and relay its
-    colleague questions until it says:  context 100/100 ✅ READY FOR PLANNING
+ 3. Tell it the ticket key (e.g. KIDS-1428) and paste the ticket.
+    Feed it chats/docs and relay its colleague questions until it
+    says:  context 100/100 ✅ READY FOR PLANNING
  4. Switch agent → "Planner"      — writes the step plan under ## Planning.
  5. Switch agent → "Implementer"  — executes the steps one at a time.
  6. Switch agent → "Review"       — runs type check/build/tests itself,
     then appends an APPROVED / REJECTED verdict.
  7. Watch it live: open task-dashboard.html in Edge/Chrome and point it
-    at .github/task/context.md (or click "view with sample data" first).
+    at your .github\task folder — a ticket switcher shows every task
+    (or click "view with sample data" first).
 
- Everything the agents know lives in .github/task/context.md (gitignored —
- it may hold internal ticket text, so it never leaves your machine).
+ Every ticket lives in .github\task\tasks\<KEY>\context.md; team.md in
+ the same folder is the shared context every agent reads on every
+ ticket. All of it is gitignored — internal text never leaves the
+ machine (or your tenant, in shared mode).
 
  Updating later: import this repo into the project root again and re-run
- install — task data is preserved. Add -ResetTask to archive it and
- start a fresh task.
+ install — task data is preserved. Add -ResetTask to archive all
+ ticket contexts and start clean.
 ──────────────────────────────────────────────────────────────────
 '@
 
 if ($Shared) {
   Write-Host @'
- Shared mode: .github\task points into your synced SharePoint library.
- Convention — agents run on ONE machine per task (the task owner's);
- everyone else opens task-dashboard.html against their own synced copy,
- which live-follows as OneDrive syncs it. Two machines running agents
- on the same task will produce OneDrive conflict copies.
+ Shared mode: .github\task points into your synced SharePoint library —
+ every ticket folder and team.md are shared with the team, and
+ SharePoint keeps automatic version history of each save.
+ Convention — agents run on ONE machine per ticket (its owner's);
+ everyone else opens the dashboard on their own synced copy, which
+ live-follows as OneDrive syncs. Two machines running agents on the
+ same ticket will produce OneDrive conflict copies.
 ──────────────────────────────────────────────────────────────────
 '@
 }

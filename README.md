@@ -23,22 +23,25 @@ One run does everything: it removes this pipeline's old files (the four agent fi
 
 Then reload VS Code → pick **Context Getter**. Agents are pinned to Claude Opus 4.8 (falls back to Sonnet 4.6; Copilot admins must enable the Opus 4.8 model policy).
 
-## Share a task with your team (SharePoint/OneDrive)
+## The team workspace (SharePoint/OneDrive) — full guide in [SHAREPOINT-SETUP.md](SHAREPOINT-SETUP.md)
 
-Context lives in one file, so sharing it = sharing one folder. Use a SharePoint document library from your M365 tenant — no new server, no firewall exception, data never leaves the tenant:
+Every ticket has its own context; one `team.md` is the super context every agent reads on every ticket:
 
-1. Create (or pick) a document library / folder in your team's SharePoint site, e.g. `Task Pipeline/kids-onboarding-mfe`.
-2. Everyone clicks **Sync** on it (OneDrive makes it a normal local folder).
-3. Each person installs with the flag, pointing at their synced copy:
+```
+.github/task/                  ← local, or a junction into the OneDrive-synced SharePoint library
+├── team.md                    ← shared across ALL tickets (humans edit; Context Getter appends on request)
+├── tasks/<KEY>/context.md     ← one folder per Jira ticket
+└── archive/
+```
+
+Point the install at your synced library and the whole team shares it — every dashboard live-follows every ticket, and SharePoint's built-in version history covers each save of the context files:
 
 ```
 bash task-helper/install.sh --shared "$HOME/SEB/Task Pipeline - kids-onboarding-mfe"
 # Windows: ...install.ps1 -Shared "C:\Users\you\SEB\Task Pipeline - kids-onboarding-mfe"
 ```
 
-`.github/task/` becomes a link into the synced folder (junction on Windows — no admin rights needed). Existing local task data is migrated in, never clobbered. Agents and the dashboard don't change at all — the dashboard live-follows your synced copy, so you watch a teammate's agent work in near-real-time as OneDrive syncs.
-
-**Single-writer convention:** agents run on ONE machine per task (the task owner's). Everyone else opens the dashboard read-only. Two machines running agents on the same task will produce OneDrive conflict copies.
+`.github/task/` becomes a link into the synced folder (junction on Windows — no admin rights needed); an old single `context.md` is migrated into `tasks/` automatically. **Single-writer convention:** agents run on ONE machine per ticket (its owner's); everyone else watches via the dashboard.
 
 ## Install via email (.txt route — when git can't reach)
 
@@ -46,9 +49,9 @@ bash task-helper/install.sh --shared "$HOME/SEB/Task Pipeline - kids-onboarding-
 
 ## Dashboard
 
-Open `task-dashboard.html` in Edge/Chrome → Open `.github/task/context.md` (or drag it in); it live-follows while agents write. Zero network — nothing leaves the machine.
+Open `task-dashboard.html` in Edge/Chrome → **Open task folder** → pick `.github/task` (or your synced library folder, or drag it in). You get a **ticket switcher** — one chip per ticket with live score and status — plus the Team context card; everything live-follows while agents write. A single `context.md` still works too. Zero network — nothing leaves the machine.
 
-**You only pick the file once.** The dashboard remembers it (locally, in the browser): next time it either reopens it automatically or shows a one-click **Resume context.md** button — no file dialog. Point it at your OneDrive-synced shared task folder once and from then on it's open-and-watch while teammates' agents write. ("forget this file" clears the memory.) **Feel it first:** click "view with sample data" (three states: gathering → implementing → approved) or open `.github/task-helper/context-example.md` and edit it while watching.
+**You only pick it once.** The dashboard remembers the folder (locally, in the browser): next time it either reopens automatically or shows a one-click **Resume** button — no dialog. ("forget this file" clears the memory.) **Feel it first:** click "view with sample data" (three states: gathering → implementing → approved) or open `.github/task-helper/context-example.md` and edit it while watching.
 
 It also works for you, not just at you: the status line always names the next move; every open question has a **copy for Teams** button that produces a ready-to-paste colleague message; sections flash when a live update changes them; the tab title + favicon dot show score/blockers from a background tab; theme toggles auto/light/dark; keys `o` open, `r` refresh, `1/2/3` samples — and yes, there's confetti when Review stamps APPROVED.
 

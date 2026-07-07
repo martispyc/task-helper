@@ -247,6 +247,25 @@
   /* resume last file */
   .resume{margin-top:26px;display:flex;gap:16px;justify-content:center;align-items:center;flex-wrap:wrap}
   #resumeName{font-family:var(--mono);font-weight:400}
+
+  /* ticket switcher */
+  .switcher{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:0 0 16px}
+  .swlbl{font-family:var(--mono);font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--faint);margin-right:2px}
+  .tchip{display:inline-flex;align-items:center;gap:7px;font:inherit;font-size:12.5px;font-weight:500;
+    padding:5px 12px;border-radius:999px;border:1px solid var(--border);background:var(--card);
+    color:var(--muted);cursor:pointer;box-shadow:var(--shadow);transition:border-color .15s,color .15s}
+  .tchip:hover{border-color:var(--border-hi);color:var(--text)}
+  .tchip.cur{border-color:var(--text);color:var(--text)}
+  .tchip i{width:7px;height:7px;border-radius:50%;background:var(--faint);display:inline-block;flex:none}
+  .tchip i.ok{background:var(--green)} .tchip i.bad{background:var(--red)} .tchip i.warn{background:var(--amber)}
+  .tchip em{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--faint)}
+  .tchip u{text-decoration:none;font-family:var(--mono);font-size:10.5px;color:var(--amber)}
+  .tchip.ghost{border-style:dashed;box-shadow:none;color:var(--faint)}
+
+  /* team context card */
+  .tc-h2{font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;color:var(--muted);padding:12px 0 4px}
+  .tc-h{font-family:var(--mono);font-size:12px;color:var(--green);padding:10px 0 2px}
+  .tc-l{font-size:13.5px;padding:2px 0}
   footer{margin-top:36px;padding-top:16px;border-top:1px solid var(--border);
     display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;
     font-family:var(--mono);font-size:11px;color:var(--faint)}
@@ -289,10 +308,10 @@
     <button class="link" id="btnDemoClose" type="button">close</button>
   </div>
 
-  <div class="dropzone rv" id="dropzone" tabindex="0" role="button" aria-label="Open a context file">
-    <h1>Drop <code>.github/task/context.md</code> here</h1>
-    <p>The file Context Getter maintains. Parsed right here in your browser — nothing is uploaded, no network calls are made.</p>
-    <div class="hint">or click to choose the file · Edge/Chrome keep it live-updating</div>
+  <div class="dropzone rv" id="dropzone" tabindex="0" role="button" aria-label="Open the task folder or a context file">
+    <h1>Drop your <code>.github/task</code> folder here</h1>
+    <p>The team workspace: every ticket's context.md plus the shared team.md. Parsed right here in your browser — nothing is uploaded, no network calls are made.</p>
+    <div class="hint">or click to choose it · Edge/Chrome keep it live-updating · <button class="link" id="btnOpenFile" type="button">open a single context.md instead</button></div>
     <div class="hint" style="margin-top:14px"><button class="link" id="btnDemo" type="button">view with sample data</button></div>
     <div class="resume" id="resume" style="display:none">
       <button class="btn primary" id="btnResume" type="button">Resume <span id="resumeName">context.md</span></button>
@@ -307,6 +326,7 @@
   </div>
 
   <div id="board">
+    <div class="switcher" id="switcher" style="display:none" aria-label="Tickets"></div>
     <div class="pipe rv" id="pipe" aria-label="Pipeline stages"></div>
 
     <div class="hero rv">
@@ -330,10 +350,11 @@
     <section class="rv"><h2>Answered <span class="count" id="qaCount"></span></h2><div id="qas"></div></section>
     <section class="rv"><h2>Additional info <span class="count" id="infoCount"></span></h2><div id="infos"></div></section>
     <section class="rv" id="secReview"><h2>Review</h2><div id="review"></div></section>
+    <section id="secTeam" style="display:none"><h2>Team context — all tickets <span class="count" id="teamCount"></span></h2><div id="team"></div></section>
 
     <footer class="rv">
       <span>parsed locally · no data leaves this machine</span>
-      <span>keys: <b>o</b> open · <b>r</b> refresh · <b>1/2/3</b> samples</span>
+      <span>keys: <b>o</b> open · <b>r</b> refresh · <b>[ ]</b> ticket · <b>1/2/3</b> samples</span>
       <span id="fname"></span>
     </footer>
   </div>
@@ -346,6 +367,7 @@
   "use strict";
   var fileHandle=null,pollTimer=null,lastMod=0,lastText="",prevScore=0,firstRender=true;
   var prevApproved=false,baseUpdated="",lastLoadTs=0,lastOpen=[];
+  var dirHandle=null,dirPollTimer=null,wsTasks=[],teamHandle=null,teamMod=0,activeKey=null;
   var reduced=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var $=function(id){return document.getElementById(id)};
 
@@ -687,13 +709,17 @@
       startPolling();
     }).catch(function(){fileHandle=null;forgetHandle();});
   }
+  function adoptAny(h){
+    if(h.kind==="directory")adoptDir(h);
+    else adoptHandle(h,true);
+  }
   function offerResume(h){
     $("resumeName").textContent=h.name||"context.md";
     $("resume").style.display="flex";
     $("btnResume").onclick=function(e){
       e.stopPropagation();
       h.requestPermission({mode:"read"}).then(function(p){
-        if(p==="granted")adoptHandle(h,true);
+        if(p==="granted")adoptAny(h);
         else{$("resume").style.display="none";forgetHandle();}
       }).catch(function(){$("resume").style.display="none";forgetHandle();});
     };
@@ -707,7 +733,7 @@
     idbGet("handle").then(function(h){
       if(!h||!h.queryPermission)return;
       h.queryPermission({mode:"read"}).then(function(p){
-        if(p==="granted")adoptHandle(h,true);      /* fully automatic */
+        if(p==="granted")adoptAny(h);              /* fully automatic */
         else if(p==="prompt")offerResume(h);       /* one click instead of the picker */
       }).catch(function(){});
     }).catch(function(){});
@@ -717,9 +743,156 @@
     if(window.showOpenFilePicker){
       try{
         var hs=await window.showOpenFilePicker({types:[{description:"Markdown",accept:{"text/markdown":[".md"]}}]});
+        closeWorkspace(true);
         adoptHandle(hs[0],true);
       }catch(e){/* cancelled */}
     }else{$("fileInput").click();}
+  }
+
+  /* ---------- workspace mode: a folder of tickets + team.md ---------- */
+  async function scanDir(dh){
+    var tasks=[],team=null,tasksDir=null,rootCtx=null,sub=[];
+    for await (var h of dh.values()){
+      var n=h.name.toLowerCase();
+      if(h.kind==="file"&&n==="team.md")team=h;
+      else if(h.kind==="file"&&n==="context.md")rootCtx=h;
+      else if(h.kind==="directory"&&n==="tasks")tasksDir=h;
+      else if(h.kind==="directory")sub.push(h);
+    }
+    async function collect(dirs){
+      for(var i=0;i<dirs.length;i++){
+        try{tasks.push({key:dirs[i].name,handle:await dirs[i].getFileHandle("context.md")});}catch(e){}
+      }
+    }
+    if(tasksDir){
+      var td=[];
+      for await (var d of tasksDir.values())if(d.kind==="directory")td.push(d);
+      await collect(td);
+    }
+    if(!tasks.length)await collect(sub);              /* picked tasks/ itself */
+    if(!tasks.length&&rootCtx)tasks.push({key:dh.name,handle:rootCtx}); /* picked one ticket folder */
+    tasks.sort(function(a,b){return a.key<b.key?-1:a.key>b.key?1:0});
+    return {tasks:tasks,team:team};
+  }
+  async function refreshBadges(){
+    for(var i=0;i<wsTasks.length;i++){
+      var t=wsTasks[i];
+      try{
+        var f=await t.handle.getFile();
+        if(t.mod===f.lastModified)continue;
+        t.mod=f.lastModified;
+        var md=await f.text(),p=sections(md);
+        var conf=parseConfidence(p.sec["confidence"]);
+        var rev=parseReview(p.sec["review"]);
+        t.score=(conf.overall==null)?null:conf.overall;
+        t.blockers=parseQuestions(p.sec["open questions"]).filter(function(q){return !q.done&&q.blocking}).length;
+        t.approved=!!(rev&&rev.approved);
+        t.rejected=!!(rev&&!rev.approved);
+      }catch(e){}
+    }
+  }
+  function buildSwitcher(){
+    var sw=$("switcher");
+    if(!dirHandle){sw.style.display="none";return;}
+    sw.style.display="flex";
+    sw.innerHTML='<span class="swlbl">tickets</span>'+wsTasks.map(function(t,i){
+      var dot=t.approved?"ok":t.rejected?"bad":t.blockers?"warn":"";
+      return '<button type="button" class="tchip'+(t.key===activeKey?" cur":"")+'" data-i="'+i+'">'
+        +'<i class="'+dot+'"></i>'+esc(t.key)
+        +(typeof t.score==="number"?'<em>'+t.score+'</em>':"")
+        +(t.blockers?'<u>⏳'+t.blockers+'</u>':"")+'</button>';
+    }).join("")+'<button type="button" class="tchip ghost" id="btnCloseWs">close folder</button>';
+  }
+  async function switchTask(key){
+    var t=null;
+    wsTasks.forEach(function(x){if(x.key===key)t=x});
+    if(!t)return;
+    activeKey=key;
+    fileHandle=t.handle;               /* the existing 2.5s poll follows this */
+    lastText="";prevScore=0;firstRender=true;prevApproved=false;
+    try{
+      var f=await t.handle.getFile();lastMod=f.lastModified;
+      readText(f,(dirHandle?dirHandle.name+"/":"")+key+"/context.md");
+      startPolling();
+    }catch(e){}
+    buildSwitcher();
+  }
+  function renderTeam(txt){
+    var infos=parseInfo(txt);
+    $("teamCount").textContent=infos.length||"";
+    var html=txt.split(/\r?\n/).map(function(l){
+      if(/^#\s/.test(l))return "";
+      if(/^###\s/.test(l))return '<div class="tc-h">'+esc(l.replace(/^###\s*/,""))+'</div>';
+      if(/^##\s/.test(l))return '<div class="tc-h2">'+esc(l.replace(/^##\s*/,""))+'</div>';
+      if(!l.trim())return "";
+      return '<div class="tc-l">'+esc(l)+'</div>';
+    }).join("");
+    $("team").innerHTML=html||'<div class="empty-note">team.md is empty — shared facts for every ticket go here.</div>';
+  }
+  async function loadTeam(){
+    if(!teamHandle||!dirHandle){$("secTeam").style.display="none";teamMod=0;return;}
+    try{
+      var f=await teamHandle.getFile();
+      if(teamMod===f.lastModified)return;
+      var isUpd=teamMod!==0;
+      teamMod=f.lastModified;
+      renderTeam(await f.text());
+      $("secTeam").style.display="block";
+      if(isUpd&&!reduced){
+        var sec=$("secTeam");
+        sec.classList.remove("chg");void sec.offsetWidth;sec.classList.add("chg");
+        setTimeout(function(){sec.classList.remove("chg")},1600);
+      }
+    }catch(e){$("secTeam").style.display="none";}
+  }
+  function startDirPolling(){
+    if(dirPollTimer)clearInterval(dirPollTimer);
+    dirPollTimer=setInterval(async function(){
+      if(!dirHandle)return;
+      try{
+        var scan=await scanDir(dirHandle);
+        scan.tasks.forEach(function(nt){          /* keep cached badge data */
+          wsTasks.forEach(function(ot){if(ot.key===nt.key){nt.mod=ot.mod;nt.score=ot.score;nt.blockers=ot.blockers;nt.approved=ot.approved;nt.rejected=ot.rejected;}});
+        });
+        wsTasks=scan.tasks;teamHandle=scan.team;
+        await refreshBadges();
+        buildSwitcher();
+        loadTeam();
+      }catch(e){}
+    },8000);
+  }
+  async function adoptDir(dh){
+    dirHandle=dh;rememberHandle(dh);
+    if(pollTimer)clearInterval(pollTimer);
+    demoOff();
+    var scan=await scanDir(dh);
+    wsTasks=scan.tasks;teamHandle=scan.team;teamMod=0;
+    await refreshBadges();
+    if(!wsTasks.length){
+      dirHandle=null;
+      $("dropzone").querySelector("p").textContent="No tickets found in that folder — expected tasks/<KEY>/context.md (or a folder containing context.md). Pick the .github/task folder or your synced library folder.";
+      return;
+    }
+    var pick=activeKey&&wsTasks.some(function(t){return t.key===activeKey})?activeKey:wsTasks[0].key;
+    buildSwitcher();
+    await switchTask(pick);
+    loadTeam();
+    startDirPolling();
+  }
+  function closeWorkspace(keepStored){
+    dirHandle=null;wsTasks=[];teamHandle=null;teamMod=0;activeKey=null;
+    if(dirPollTimer)clearInterval(dirPollTimer);
+    buildSwitcher();
+    $("secTeam").style.display="none";
+    if(!keepStored)forgetHandle();
+  }
+  async function openWorkspace(){
+    if(window.showDirectoryPicker){
+      try{
+        var dh=await window.showDirectoryPicker();
+        adoptDir(dh);
+      }catch(e){/* cancelled */}
+    }else openPicker();
   }
   function startPolling(){
     if(pollTimer)clearInterval(pollTimer);
@@ -737,8 +910,25 @@
     else if(lastText){render(lastText,$("fname").textContent,false);}
   }
 
-  $("btnOpen").addEventListener("click",openPicker);
+  $("btnOpen").addEventListener("click",openWorkspace);
+  $("btnOpenFile").addEventListener("click",function(e){e.stopPropagation();openPicker();});
+  if(window.showDirectoryPicker)$("btnOpen").textContent="Open task folder";
+  else $("btnOpen").textContent="Open context.md";
   $("btnRefresh").addEventListener("click",refresh);
+  $("switcher").addEventListener("click",function(e){
+    var b=e.target.closest?e.target.closest("button"):null;
+    if(!b)return;
+    if(b.id==="btnCloseWs"){
+      closeWorkspace(false);
+      if(pollTimer)clearInterval(pollTimer);
+      fileHandle=null;$("livedot").classList.remove("on");
+      lastText="";prevScore=0;firstRender=true;
+      $("board").style.display="none";$("dropzone").style.display="block";
+      return;
+    }
+    var i=b.getAttribute("data-i");
+    if(i!=null&&wsTasks[+i])switchTask(wsTasks[+i].key);
+  });
   applyTheme(loadPref("tp-theme")||"");
   $("btnTheme").addEventListener("click",function(){
     var cur=loadPref("tp-theme")||"";
@@ -759,8 +949,15 @@
     if(e.ctrlKey||e.metaKey||e.altKey)return;
     var tag=(e.target.tagName||"").toLowerCase();
     if(tag==="input"||tag==="textarea"||e.target.isContentEditable)return;
-    if(e.key==="o")openPicker();
+    if(e.key==="o")openWorkspace();
     else if(e.key==="r")refresh();
+    else if(dirHandle&&(e.key==="["||e.key==="]")){
+      if(!wsTasks.length)return;
+      var idx=0;
+      wsTasks.forEach(function(t,i){if(t.key===activeKey)idx=i});
+      idx=(idx+(e.key==="]"?1:wsTasks.length-1))%wsTasks.length;
+      switchTask(wsTasks[idx].key);
+    }
     else if(demoKey&&(e.key==="1"||e.key==="2"||e.key==="3"))
       loadDemo(["gathering","implementing","approved"][+e.key-1]);
   });
@@ -770,23 +967,24 @@
     var rel=secs<8?"just now":secs<60?secs+"s ago":secs<3600?Math.round(secs/60)+"m ago":Math.round(secs/3600)+"h ago";
     $("updated").textContent=baseUpdated+"loaded "+rel;
   },5000);
-  $("dropzone").addEventListener("click",openPicker);
-  $("dropzone").addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" ")openPicker();});
+  $("dropzone").addEventListener("click",openWorkspace);
+  $("dropzone").addEventListener("keydown",function(e){if(e.key==="Enter"||e.key===" ")openWorkspace();});
   ["dragover","dragleave","drop"].forEach(function(ev){
     document.body.addEventListener(ev,function(e){
       e.preventDefault();
       $("dropzone").classList.toggle("drag",ev==="dragover");
-      if(ev==="drop"&&e.dataTransfer.files.length){
-        fileHandle=null;$("livedot").classList.remove("on");
-        /* grab a real handle from the drop when the browser offers one —
-           makes even drag-drop remembered + live-followed */
-        var it=e.dataTransfer.items&&e.dataTransfer.items[0];
-        if(it&&it.getAsFileSystemHandle)
-          it.getAsFileSystemHandle().then(function(h){
-            if(h&&h.kind==="file")adoptHandle(h,false);
-          }).catch(function(){});
-        readText(e.dataTransfer.files[0]);
-      }
+      if(ev!=="drop")return;
+      /* prefer a real handle from the drop (folder or file) — remembered + live */
+      var it=e.dataTransfer.items&&e.dataTransfer.items[0];
+      var hp=(it&&it.getAsFileSystemHandle)?it.getAsFileSystemHandle():null;
+      var f=e.dataTransfer.files.length?e.dataTransfer.files[0]:null;
+      function plain(){if(f){fileHandle=null;$("livedot").classList.remove("on");readText(f);}}
+      if(hp)hp.then(function(h){
+        if(h&&h.kind==="directory")adoptDir(h);
+        else if(h&&h.kind==="file"){closeWorkspace(true);adoptHandle(h,true);}
+        else plain();
+      }).catch(plain);
+      else plain();
     });
   });
   $("fileInput").addEventListener("change",function(e){if(e.target.files.length)readText(e.target.files[0]);});
@@ -820,6 +1018,7 @@
       +"## Review\n### Verdict — 2026-07-06\nSTATUS: APPROVED\nVerified: npx tsc --noEmit ✓ · ng build ✓ · ng test ChromeHeadless — 34/34 ✓ · all 7 plan steps confirmed\n"
   };
   function loadDemo(k){
+    closeWorkspace(true);
     fileHandle=null;
     if(pollTimer)clearInterval(pollTimer);
     $("livedot").classList.remove("on");
