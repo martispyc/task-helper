@@ -96,7 +96,7 @@ UX layer (all local, zero network): **workspace mode** — `showDirectoryPicker`
 
 ## Working in this repo
 
-- After editing `task-dashboard.html`: extract the `<script>` block and `node --check` it; then open it and eyeball all three demo states plus `context-example.md` via the picker.
+- After editing `task-dashboard.html`: extract the `<script>` block and `node --check` it; then open it and eyeball all three demo states, `context-example.md` via the picker, and workspace mode (a folder with `tasks/<KEY>/context.md` + `team.md`) — in both color schemes.
 - After editing agents: keep contracts + dashboard format contract in sync; keep each body well under 30k chars.
 - Sample/test data: `bundle/.github/task-helper/context-example.md` (implementing-state KIDS-1428).
 - Naming is temporary-neutral (Context Getter / Planner / Implementer / Review); owners may rename display `name:` but file names are load-bearing (handoff targets + install script lists).

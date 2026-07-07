@@ -5,7 +5,7 @@
 $ErrorActionPreference = 'Stop'
 
 $agents  = 'context-getter.agent.md','planner.agent.md','implementer.agent.md','review.agent.md'
-$support = 'context-template.md','framework-rules.md','context-example.md'
+$support = 'context-template.md','framework-rules.md','context-example.md','team-template.md'
 
 New-Item -ItemType Directory -Force .github\agents, .github\task-helper, .github\task | Out-Null
 
@@ -18,8 +18,17 @@ foreach ($f in $agents)  { if (Test-Path $f) { Move-Item $f ".github\agents\$f" 
 foreach ($f in $support) { if (Test-Path $f) { Move-Item $f ".github\task-helper\$f" -Force } }
 # task-dashboard.html and README.md stay in the repo root
 
+# workspace layout: per-ticket folders + shared team context
+New-Item -ItemType Directory -Force .github\task\tasks | Out-Null
+if (-not (Test-Path .github\task\team.md) -and (Test-Path .github\task-helper\team-template.md)) {
+  Copy-Item .github\task-helper\team-template.md .github\task\team.md
+}
+
 if (-not (Test-Path .gitignore) -or -not (Select-String -Path .gitignore -Pattern '^\.github/task/' -Quiet)) {
   Add-Content .gitignore "`n.github/task/"
+}
+if (-not (Select-String -Path .gitignore -Pattern '^\.github/task$' -Quiet)) {
+  Add-Content .gitignore ".github/task"
 }
 
 # the transfer set has done its job — remove the setup scripts themselves

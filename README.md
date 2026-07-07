@@ -71,6 +71,7 @@ Ground rules for changes are in CLAUDE.md; the two that matter most: agent outpu
 
 ```
 CLAUDE.md              project memory for Claude Code (read it — it's the spec)
+SHAREPOINT-SETUP.md    team setup tutorial: shared tickets + team context over SharePoint
 bundle/                exactly what lands in a target project
 install.sh / .ps1      run from a target project root to install/update
 export-txt.sh          builds the .txt transfer set

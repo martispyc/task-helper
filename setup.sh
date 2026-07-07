@@ -12,12 +12,19 @@ done
 for f in context-getter.agent.md planner.agent.md implementer.agent.md review.agent.md; do
   [ -e "$f" ] && mv -f "$f" .github/agents/
 done
-for f in context-template.md framework-rules.md context-example.md; do
+for f in context-template.md framework-rules.md context-example.md team-template.md; do
   [ -e "$f" ] && mv -f "$f" .github/task-helper/
 done
 # task-dashboard.html and README.md stay in the repo root
 
+# workspace layout: per-ticket folders + shared team context
+mkdir -p .github/task/tasks
+if [ ! -f .github/task/team.md ] && [ -f .github/task-helper/team-template.md ]; then
+  cp .github/task-helper/team-template.md .github/task/team.md
+fi
+
 grep -qx '.github/task/' .gitignore 2>/dev/null || printf '\n.github/task/\n' >> .gitignore
+grep -qx '.github/task' .gitignore 2>/dev/null || printf '.github/task\n' >> .gitignore
 
 # the transfer set has done its job — remove the setup scripts themselves
 rm -f setup.sh setup.sh.txt setup.ps1 setup.ps1.txt

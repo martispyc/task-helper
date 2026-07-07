@@ -260,6 +260,7 @@
   .tchip i.ok{background:var(--green)} .tchip i.bad{background:var(--red)} .tchip i.warn{background:var(--amber)}
   .tchip em{font-style:normal;font-family:var(--mono);font-size:11px;color:var(--faint)}
   .tchip u{text-decoration:none;font-family:var(--mono);font-size:10.5px;color:var(--amber)}
+  .tchip u.cf{color:var(--red)}
   .tchip.ghost{border-style:dashed;box-shadow:none;color:var(--faint)}
 
   /* team context card */
@@ -337,7 +338,7 @@
       <div class="gauge" id="gauge">
         <div class="score"><span id="scoreNum">0</span><small> /100</small></div>
         <div class="track"><div class="fill" id="fill"></div></div>
-        <div class="statusline">
+        <div class="statusline" aria-live="polite">
           <span class="stamp">Ready for planning</span>
           <span id="statusText"></span>
         </div>
@@ -367,7 +368,7 @@
   "use strict";
   var fileHandle=null,pollTimer=null,lastMod=0,lastText="",prevScore=0,firstRender=true;
   var prevApproved=false,baseUpdated="",lastLoadTs=0,lastOpen=[];
-  var dirHandle=null,dirPollTimer=null,wsTasks=[],teamHandle=null,teamMod=0,activeKey=null;
+  var dirHandle=null,dirPollTimer=null,wsTasks=[],teamHandle=null,teamMod=0,activeKey=null,activeConflict=false;
   var reduced=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var $=function(id){return document.getElementById(id)};
 
@@ -587,6 +588,7 @@
     else if(ctxDone)nextMsg="hand off to Planner";
     else if(conf.override)nextMsg=conf.override;
     else nextMsg="not ready · "+(blockers?blockers+" blocking question"+(blockers>1?"s":"")+" open — copy & send below":"gaps listed below");
+    if(activeConflict)nextMsg="⚠ OneDrive conflict copy in this ticket folder — merge & delete it · "+nextMsg;
     $("statusText").textContent=nextMsg;
 
     /* dimensions */
@@ -714,7 +716,7 @@
     else adoptHandle(h,true);
   }
   function offerResume(h){
-    $("resumeName").textContent=h.name||"context.md";
+    $("resumeName").textContent=(h.name||"context.md")+(h.kind==="directory"?"/":"");
     $("resume").style.display="flex";
     $("btnResume").onclick=function(e){
       e.stopPropagation();
@@ -761,7 +763,14 @@
     }
     async function collect(dirs){
       for(var i=0;i<dirs.length;i++){
-        try{tasks.push({key:dirs[i].name,handle:await dirs[i].getFileHandle("context.md")});}catch(e){}
+        try{
+          var ch=await dirs[i].getFileHandle("context.md");
+          /* OneDrive conflict copies look like context-DESKTOP-XYZ.md */
+          var conflict=false;
+          for await (var s of dirs[i].values())
+            if(s.kind==="file"&&/^context.+\.md$/i.test(s.name))conflict=true;
+          tasks.push({key:dirs[i].name,handle:ch,conflict:conflict});
+        }catch(e){}
       }
     }
     if(tasksDir){
@@ -800,18 +809,21 @@
       return '<button type="button" class="tchip'+(t.key===activeKey?" cur":"")+'" data-i="'+i+'">'
         +'<i class="'+dot+'"></i>'+esc(t.key)
         +(typeof t.score==="number"?'<em>'+t.score+'</em>':"")
-        +(t.blockers?'<u>⏳'+t.blockers+'</u>':"")+'</button>';
+        +(t.blockers?'<u>⏳'+t.blockers+'</u>':"")
+        +(t.conflict?'<u class="cf">⚠</u>':"")+'</button>';
     }).join("")+'<button type="button" class="tchip ghost" id="btnCloseWs">close folder</button>';
   }
   async function switchTask(key){
     var t=null;
     wsTasks.forEach(function(x){if(x.key===key)t=x});
     if(!t)return;
-    activeKey=key;
+    activeKey=key;activeConflict=!!t.conflict;
     fileHandle=t.handle;               /* the existing 2.5s poll follows this */
     lastText="";prevScore=0;firstRender=true;prevApproved=false;
     try{
-      var f=await t.handle.getFile();lastMod=f.lastModified;
+      var f=await t.handle.getFile();
+      if(activeKey!==key)return;       /* a faster switch won the race */
+      lastMod=f.lastModified;
       readText(f,(dirHandle?dirHandle.name+"/":"")+key+"/context.md");
       startPolling();
     }catch(e){}
@@ -825,7 +837,7 @@
       if(/^###\s/.test(l))return '<div class="tc-h">'+esc(l.replace(/^###\s*/,""))+'</div>';
       if(/^##\s/.test(l))return '<div class="tc-h2">'+esc(l.replace(/^##\s*/,""))+'</div>';
       if(!l.trim())return "";
-      return '<div class="tc-l">'+esc(l)+'</div>';
+      return '<div class="tc-l">'+esc(l).replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>")+'</div>';
     }).join("");
     $("team").innerHTML=html||'<div class="empty-note">team.md is empty — shared facts for every ticket go here.</div>';
   }
@@ -858,6 +870,13 @@
         await refreshBadges();
         buildSwitcher();
         loadTeam();
+        if(!activeKey&&wsTasks.length)switchTask(wsTasks[0].key); /* first ticket just appeared */
+        else{
+          var act=null;
+          wsTasks.forEach(function(t){if(t.key===activeKey)act=t});
+          var nc=!!(act&&act.conflict);
+          if(nc!==activeConflict){activeConflict=nc;if(lastText)render(lastText,$("fname").textContent,false);}
+        }
       }catch(e){}
     },8000);
   }
@@ -869,8 +888,9 @@
     wsTasks=scan.tasks;teamHandle=scan.team;teamMod=0;
     await refreshBadges();
     if(!wsTasks.length){
-      dirHandle=null;
-      $("dropzone").querySelector("p").textContent="No tickets found in that folder — expected tasks/<KEY>/context.md (or a folder containing context.md). Pick the .github/task folder or your synced library folder.";
+      /* empty workspace — watch it; the first ticket an agent creates pops in live */
+      $("dropzone").querySelector("p").textContent="Watching \""+dh.name+"\" — no tickets yet. They appear here the moment Context Getter creates one (tasks/<KEY>/context.md).";
+      startDirPolling();
       return;
     }
     var pick=activeKey&&wsTasks.some(function(t){return t.key===activeKey})?activeKey:wsTasks[0].key;
@@ -880,7 +900,7 @@
     startDirPolling();
   }
   function closeWorkspace(keepStored){
-    dirHandle=null;wsTasks=[];teamHandle=null;teamMod=0;activeKey=null;
+    dirHandle=null;wsTasks=[];teamHandle=null;teamMod=0;activeKey=null;activeConflict=false;
     if(dirPollTimer)clearInterval(dirPollTimer);
     buildSwitcher();
     $("secTeam").style.display="none";
@@ -919,7 +939,7 @@
     var b=e.target.closest?e.target.closest("button"):null;
     if(!b)return;
     if(b.id==="btnCloseWs"){
-      closeWorkspace(false);
+      closeWorkspace(true);   /* closing the view keeps the remembered handle */
       if(pollTimer)clearInterval(pollTimer);
       fileHandle=null;$("livedot").classList.remove("on");
       lastText="";prevScore=0;firstRender=true;
@@ -1032,6 +1052,7 @@
   $("btnDemoClose").addEventListener("click",function(){
     demoOff();lastText="";prevScore=0;firstRender=true;
     $("board").style.display="none";$("dropzone").style.display="block";
+    tryResume();   /* straight back into the real workspace if one is remembered */
   });
 
   revealAll();
