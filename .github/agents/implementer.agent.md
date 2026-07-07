@@ -7,7 +7,7 @@ disable-model-invocation: true
 handoffs:
   - label: 'Done → Review'
     agent: review
-    prompt: 'Implementation is complete per the steps in the active ticket''s file under .github/task/tasks/. Review the changes against the plan and framework rules.'
+    prompt: 'Implementation is complete per the steps in the active ticket''s file under projects/ in the task hub. Review the changes against the plan and framework rules.'
     send: false
 ---
 
@@ -19,8 +19,8 @@ You are stage 3 of the pipeline **Context Getter → Planner → Implementer →
 
 ## Contract (keep this stable)
 
-- **Ticket first:** every ticket lives in `.github/task/tasks/<KEY>/context.md`. Take the key from the user's message or ask; that file is your working file for the session.
-- **Input:** the ticket's `context.md` — `### 3 · Implementation steps` under `## Planning` is your work queue; everything above `## Planning` is read-only background. Read `.github/task-helper/framework-rules.md` before touching code (its rules outrank your general habits) and `.github/task/team.md` if present — shared cross-ticket facts (never write to it).
+- **Hub, project, ticket first:** you live in the task hub — the workspace folder whose root has `task-helper/` and `projects/`; paths below are hub-relative, and humans handle all git on the hub. Resolve the project (code folder name matched against `projects/*`, else ask), then the ticket: `projects/<project>/tasks/<KEY>/context.md` is your working file for the session.
+- **Input:** the ticket's `context.md` — `### 3 · Implementation steps` under `## Planning` is your work queue; everything above `## Planning` is read-only background. Read `task-helper/framework-rules.md` before touching code (its rules outrank your general habits) plus `team.md` (hub root) and `projects/<project>/project.md` if present — shared facts (never write to them).
 - **Output:** code changes; ticked steps in the plan.
 - **Boundary:** never commit, push, branch, or open PRs unless the user explicitly asks. No drive-by refactors; unrelated findings get one line in chat, not a fix. No plan in the file → route the user to the Planner.
 

@@ -258,6 +258,12 @@
   .tchip u{text-decoration:none;font-family:var(--mono);font-size:10.5px;color:var(--amber)}
   .tchip u.cf{color:var(--red)}
   .tchip.ghost{border-style:dashed;box-shadow:none;color:var(--faint)}
+  .tchip.pchip{background:var(--inset)}
+  .tchip.pchip.cur{background:var(--card);border-color:var(--text)}
+  .swbrk{flex-basis:100%;height:0}
+  .tc-src{font-family:var(--mono);font-size:10.5px;letter-spacing:.08em;text-transform:uppercase;
+    color:var(--faint);padding:14px 0 0;margin-top:6px;border-top:1px dashed var(--border)}
+  .tc-src:first-child{border-top:0;margin-top:0}
 
   /* compose — talk to the agents */
   .compose textarea,#newTicket textarea{width:100%;resize:vertical;min-height:60px;font:inherit;font-size:13.5px;color:var(--text);
@@ -325,8 +331,8 @@
   </section>
 
   <div class="dropzone rv" id="dropzone" tabindex="0" role="button" aria-label="Open the task folder or a context file">
-    <h1>Drop your <code>.github/task</code> folder here</h1>
-    <p>The team workspace: every ticket's context.md plus the shared team.md. Parsed right here in your browser — nothing is uploaded, no network calls are made.</p>
+    <h1>Drop your <code>task-hub</code> folder here</h1>
+    <p>The git-shared hub: every project, every ticket's context.md, team.md. Parsed right here in your browser — nothing is uploaded, no network calls are made.</p>
     <div class="hint">or click to choose it · Edge/Chrome keep it live-updating · <button class="link" id="btnOpenFile" type="button">open a single context.md instead</button> · <button class="link" id="btnNewTicketDz" type="button">start a new ticket with AI</button></div>
     <div class="hint" style="margin-top:14px"><button class="link" id="btnDemo" type="button">view with sample data</button></div>
     <div class="resume" id="resume" style="display:none">
@@ -395,6 +401,7 @@
   var fileHandle=null,pollTimer=null,lastMod=0,lastText="",prevScore=0,firstRender=true;
   var prevApproved=false,baseUpdated="",lastLoadTs=0,lastOpen=[];
   var dirHandle=null,dirPollTimer=null,wsTasks=[],teamHandle=null,teamMod=0,activeKey=null,activeConflict=false;
+  var wsProjects=[],activeProject=null,projMdHandle=null;
   var reduced=window.matchMedia&&window.matchMedia("(prefers-reduced-motion: reduce)").matches;
   var $=function(id){return document.getElementById(id)};
 
@@ -628,7 +635,7 @@
     else if(ctxDone)nextMsg="hand off to Planner";
     else if(conf.override)nextMsg=conf.override;
     else nextMsg="not ready · "+(blockers?blockers+" blocking question"+(blockers>1?"s":"")+" open — copy & send below":"gaps listed below");
-    if(activeConflict)nextMsg="⚠ OneDrive conflict copy in this ticket folder — merge & delete it · "+nextMsg;
+    if(activeConflict)nextMsg="⚠ conflict copy (context-*.md) in this ticket folder — merge & delete it · "+nextMsg;
     $("statusText").textContent=nextMsg;
 
     /* state-matched AI action — one click assembles the right prompt */
@@ -807,37 +814,77 @@
     }else{$("fileInput").click();}
   }
 
-  /* ---------- workspace mode: a folder of tickets + team.md ---------- */
-  async function scanDir(dh){
-    var tasks=[],team=null,tasksDir=null,rootCtx=null,sub=[];
-    for await (var h of dh.values()){
+  /* ---------- workspace mode: the hub (projects/) or a flat folder of tickets ---------- */
+  async function subdirs(dh){
+    var out=[];
+    for await (var d of dh.values())if(d.kind==="directory")out.push(d);
+    return out;
+  }
+  async function collectTickets(dirs){
+    var tasks=[];
+    for(var i=0;i<dirs.length;i++){
+      try{
+        var ch=await dirs[i].getFileHandle("context.md");
+        /* sync/merge conflict copies look like context-DESKTOP-XYZ.md */
+        var conflict=false;
+        for await (var s of dirs[i].values())
+          if(s.kind==="file"&&/^context.+\.md$/i.test(s.name))conflict=true;
+        tasks.push({key:dirs[i].name,handle:ch,conflict:conflict});
+      }catch(e){}
+    }
+    tasks.sort(function(a,b){return a.key<b.key?-1:a.key>b.key?1:0});
+    return tasks;
+  }
+  async function scanProject(pdir){
+    var tasksDir=null,projectMd=null;
+    for await (var h of pdir.values()){
+      var n=h.name.toLowerCase();
+      if(h.kind==="directory"&&n==="tasks")tasksDir=h;
+      else if(h.kind==="file"&&n==="project.md")projectMd=h;
+    }
+    return {ticketDirs:tasksDir?await subdirs(tasksDir):[],projectMd:projectMd};
+  }
+  function mergeBadges(newTasks){
+    newTasks.forEach(function(nt){
+      wsTasks.forEach(function(ot){if(ot.key===nt.key){nt.mod=ot.mod;nt.score=ot.score;nt.blockers=ot.blockers;nt.approved=ot.approved;nt.rejected=ot.rejected;}});
+    });
+    return newTasks;
+  }
+  async function rescanWorkspace(){
+    var team=null,projectsDir=null,rootCtx=null,tasksDir=null,sub=[];
+    for await (var h of dirHandle.values()){
       var n=h.name.toLowerCase();
       if(h.kind==="file"&&n==="team.md")team=h;
       else if(h.kind==="file"&&n==="context.md")rootCtx=h;
+      else if(h.kind==="directory"&&n==="projects")projectsDir=h;
       else if(h.kind==="directory"&&n==="tasks")tasksDir=h;
       else if(h.kind==="directory")sub.push(h);
     }
-    async function collect(dirs){
-      for(var i=0;i<dirs.length;i++){
-        try{
-          var ch=await dirs[i].getFileHandle("context.md");
-          /* OneDrive conflict copies look like context-DESKTOP-XYZ.md */
-          var conflict=false;
-          for await (var s of dirs[i].values())
-            if(s.kind==="file"&&/^context.+\.md$/i.test(s.name))conflict=true;
-          tasks.push({key:dirs[i].name,handle:ch,conflict:conflict});
-        }catch(e){}
+    teamHandle=team;
+    if(projectsDir){
+      /* hub layout: projects/<name>/tasks/<KEY>/context.md (+ optional project.md) */
+      var plist=[],pd=await subdirs(projectsDir);
+      for(var i=0;i<pd.length;i++){
+        var sp=await scanProject(pd[i]);
+        if(sp.ticketDirs.length||sp.projectMd)
+          plist.push({name:pd[i].name,ticketDirs:sp.ticketDirs,projectMd:sp.projectMd,count:sp.ticketDirs.length});
       }
+      plist.sort(function(a,b){return a.name<b.name?-1:1});
+      wsProjects=plist;
+      var want=activeProject||loadPref("tp-proj"),cur=null;
+      plist.forEach(function(p){if(p.name===want)cur=p});
+      if(!cur)cur=plist[0]||null;
+      activeProject=cur?cur.name:null;
+      projMdHandle=cur?cur.projectMd:null;
+      wsTasks=cur?mergeBadges(await collectTickets(cur.ticketDirs)):[];
+    }else{
+      wsProjects=[];activeProject=null;projMdHandle=null;
+      var tasks=[];
+      if(tasksDir)tasks=await collectTickets(await subdirs(tasksDir));
+      if(!tasks.length)tasks=await collectTickets(sub);      /* picked tasks/ itself */
+      if(!tasks.length&&rootCtx)tasks=[{key:dirHandle.name,handle:rootCtx}]; /* one ticket folder */
+      wsTasks=mergeBadges(tasks);
     }
-    if(tasksDir){
-      var td=[];
-      for await (var d of tasksDir.values())if(d.kind==="directory")td.push(d);
-      await collect(td);
-    }
-    if(!tasks.length)await collect(sub);              /* picked tasks/ itself */
-    if(!tasks.length&&rootCtx)tasks.push({key:dh.name,handle:rootCtx}); /* picked one ticket folder */
-    tasks.sort(function(a,b){return a.key<b.key?-1:a.key>b.key?1:0});
-    return {tasks:tasks,team:team};
   }
   async function refreshBadges(){
     for(var i=0;i<wsTasks.length;i++){
@@ -860,7 +907,14 @@
     var sw=$("switcher");
     if(!dirHandle){sw.style.display="none";return;}
     sw.style.display="flex";
-    sw.innerHTML='<span class="swlbl">tickets</span>'+wsTasks.map(function(t,i){
+    var ph="";
+    if(wsProjects.length){
+      ph='<span class="swlbl">project</span>'+wsProjects.map(function(p,i){
+        return '<button type="button" class="tchip pchip'+(p.name===activeProject?" cur":"")+'" data-p="'+i+'">'
+          +esc(p.name)+'<em>'+p.count+'</em></button>';
+      }).join("")+'<span class="swbrk"></span>';
+    }
+    sw.innerHTML=ph+'<span class="swlbl">tickets</span>'+wsTasks.map(function(t,i){
       var dot=t.approved?"ok":t.rejected?"bad":t.blockers?"warn":"";
       return '<button type="button" class="tchip'+(t.key===activeKey?" cur":"")+'" data-i="'+i+'">'
         +'<i class="'+dot+'"></i>'+esc(t.key)
@@ -869,6 +923,28 @@
         +(t.conflict?'<u class="cf">⚠</u>':"")+'</button>';
     }).join("")+'<button type="button" class="tchip ghost" id="btnNewTicket">+ new ticket</button>'
     +'<button type="button" class="tchip ghost" id="btnCloseWs">close folder</button>';
+  }
+  async function switchProject(name){
+    var cur=null;
+    wsProjects.forEach(function(p){if(p.name===name)cur=p});
+    if(!cur)return;
+    activeProject=name;storePref("tp-proj",name);
+    projMdHandle=cur.projectMd;
+    wsTasks=mergeBadges(await collectTickets(cur.ticketDirs));
+    await refreshBadges();
+    activeKey=null;
+    buildSwitcher();
+    teamMod=0;loadTeam();
+    if(wsTasks.length)switchTask(wsTasks[0].key);
+    else{
+      /* project without tickets yet — placeholder through the normal renderer */
+      fileHandle=null;
+      if(pollTimer)clearInterval(pollTimer);
+      $("livedot").classList.remove("on");
+      lastText="";prevScore=0;firstRender=true;prevApproved=false;activeConflict=false;
+      render("# "+name+" — no tickets yet\n\n## Ticket\nPress n (or “+ new ticket”) to start one with AI.\n",
+        dirHandle.name+"/"+name,false);
+    }
   }
   async function switchTask(key){
     var t=null;
@@ -884,31 +960,40 @@
       var txt=await f.text();
       if(activeKey!==key)return;
       lastText=txt;
-      render(txt,(dirHandle?dirHandle.name+"/":"")+key+"/context.md",false);
+      render(txt,(dirHandle?dirHandle.name+"/":"")+(activeProject?activeProject+"/":"")+key+"/context.md",false);
       if(!demoKey)startPolling();      /* no fake "live" dot on sample data */
     }catch(e){}
     buildSwitcher();
   }
-  function renderTeam(txt){
-    var infos=parseInfo(txt);
-    $("teamCount").textContent=infos.length||"";
-    var html=txt.split(/\r?\n/).map(function(l){
+  function teamBlockHTML(txt){
+    return txt.split(/\r?\n/).map(function(l){
       if(/^#\s/.test(l))return "";
       if(/^###\s/.test(l))return '<div class="tc-h">'+esc(l.replace(/^###\s*/,""))+'</div>';
       if(/^##\s/.test(l))return '<div class="tc-h2">'+esc(l.replace(/^##\s*/,""))+'</div>';
       if(!l.trim())return "";
       return '<div class="tc-l">'+esc(l).replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>")+'</div>';
     }).join("");
-    $("team").innerHTML=html||'<div class="empty-note">team.md is empty — shared facts for every ticket go here.</div>';
   }
   async function loadTeam(){
-    if(!teamHandle||!dirHandle){$("secTeam").style.display="none";teamMod=0;return;}
+    if(!dirHandle||(!teamHandle&&!projMdHandle)){$("secTeam").style.display="none";teamMod=0;return;}
     try{
-      var f=await teamHandle.getFile();
-      if(teamMod===f.lastModified)return;
+      var tf=teamHandle?await teamHandle.getFile():null;
+      var pf=projMdHandle?await projMdHandle.getFile():null;
+      var mod=(tf?tf.lastModified:0)+"·"+(pf?pf.lastModified:0)+"·"+(activeProject||"");
+      if(mod===teamMod)return;
       var isUpd=teamMod!==0;
-      teamMod=f.lastModified;
-      renderTeam(await f.text());
+      teamMod=mod;
+      var html="",count=0,txt;
+      if(tf){
+        txt=await tf.text();count+=parseInfo(txt).length;
+        html+=(pf?'<div class="tc-src">global — team.md</div>':"")+teamBlockHTML(txt);
+      }
+      if(pf){
+        txt=await pf.text();count+=parseInfo(txt).length;
+        html+='<div class="tc-src">'+esc(activeProject)+' — project.md</div>'+teamBlockHTML(txt);
+      }
+      $("teamCount").textContent=count||"";
+      $("team").innerHTML=html||'<div class="empty-note">team.md is empty — shared facts for every ticket go here.</div>';
       $("secTeam").style.display="block";
       if(isUpd&&!reduced){
         var sec=$("secTeam");
@@ -922,11 +1007,7 @@
     dirPollTimer=setInterval(async function(){
       if(!dirHandle)return;
       try{
-        var scan=await scanDir(dirHandle);
-        scan.tasks.forEach(function(nt){          /* keep cached badge data */
-          wsTasks.forEach(function(ot){if(ot.key===nt.key){nt.mod=ot.mod;nt.score=ot.score;nt.blockers=ot.blockers;nt.approved=ot.approved;nt.rejected=ot.rejected;}});
-        });
-        wsTasks=scan.tasks;teamHandle=scan.team;
+        await rescanWorkspace();
         await refreshBadges();
         buildSwitcher();
         loadTeam();
@@ -944,23 +1025,28 @@
     dirHandle=dh;rememberHandle(dh);
     if(pollTimer)clearInterval(pollTimer);
     demoOff();
-    var scan=await scanDir(dh);
-    wsTasks=scan.tasks;teamHandle=scan.team;teamMod=0;
+    wsTasks=[];wsProjects=[];activeProject=null;projMdHandle=null;teamMod=0;
+    await rescanWorkspace();
     await refreshBadges();
-    if(!wsTasks.length){
+    if(!wsTasks.length&&!wsProjects.length){
       /* empty workspace — watch it; the first ticket an agent creates pops in live */
-      $("dropzone").querySelector("p").textContent="Watching \""+dh.name+"\" — no tickets yet. They appear here the moment Context Getter creates one (tasks/<KEY>/context.md).";
+      $("dropzone").querySelector("p").textContent="Watching \""+dh.name+"\" — no tickets yet. They appear here the moment Context Getter creates one (projects/<project>/tasks/<KEY>/context.md).";
       startDirPolling();
       return;
     }
-    var pick=activeKey&&wsTasks.some(function(t){return t.key===activeKey})?activeKey:wsTasks[0].key;
     buildSwitcher();
-    await switchTask(pick);
+    if(wsTasks.length){
+      var pick=activeKey&&wsTasks.some(function(t){return t.key===activeKey})?activeKey:wsTasks[0].key;
+      await switchTask(pick);
+    }else if(activeProject){
+      await switchProject(activeProject);   /* project.md-only project — placeholder view */
+    }
     loadTeam();
     startDirPolling();
   }
   function closeWorkspace(keepStored){
     dirHandle=null;wsTasks=[];teamHandle=null;teamMod=0;activeKey=null;activeConflict=false;
+    wsProjects=[];activeProject=null;projMdHandle=null;
     if(dirPollTimer)clearInterval(dirPollTimer);
     buildSwitcher();
     $("secTeam").style.display="none";
@@ -1007,6 +1093,8 @@
       $("board").style.display="none";$("dropzone").style.display="block";
       return;
     }
+    var pi=b.getAttribute("data-p");
+    if(pi!=null&&wsProjects[+pi]){switchProject(wsProjects[+pi].name);return;}
     var i=b.getAttribute("data-i");
     if(i!=null&&wsTasks[+i])switchTask(wsTasks[+i].key);
   });
@@ -1084,7 +1172,9 @@
     var key=$("ntKey").value.trim().toUpperCase();
     if(!key){$("ntKey").focus();return;}
     var ctx=$("ntCtx").value.trim();
-    var msg=key+": new ticket — create tasks/"+key+"/context.md from the template, file the material below under ## Ticket / ## Additional info, then score the confidence meter:\n\n"
+    var path=activeProject?"projects/"+activeProject+"/tasks/"+key:"tasks/"+key;
+    var msg=key+": new ticket"+(activeProject?" in project "+activeProject:"")
+      +" — create "+path+"/context.md from the template, file the material below under ## Ticket / ## Additional info, then score the confidence meter:\n\n"
       +(ctx||"(no material yet — ask me for the ticket text)");
     aiHandoff(msg,$("btnNtStart"),"Start with AI");
     $("ntKey").value="";$("ntCtx").value="";
